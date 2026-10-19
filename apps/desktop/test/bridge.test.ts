@@ -28,6 +28,11 @@ describe('bridge', () => {
     })
   })
 
+  test('languages lists what language: accepts', async () => {
+    const languages = await createBridge({ layout, root: fixture.root }).bundleGrepLanguages()
+    expect(languages.ok && languages.value).toContain('TypeScript')
+  })
+
   test('sync rejects anything but a non-empty array of sources', async () => {
     const bridge = createBridge({ layout, root: fixture.root })
     for (const sources of [undefined, 'x', [], [''], [1], ['ok', null]]) {

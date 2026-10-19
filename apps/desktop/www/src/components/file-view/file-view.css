@@ -1,0 +1,54 @@
+.file-view-crumbs {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 0 4px;
+  margin-bottom: 12px;
+  font: var(--mono);
+  font-size: 14px;
+}
+
+.file-view-crumbs a {
+  color: var(--accent);
+  text-decoration: none;
+}
+
+.file-view-back {
+  margin-right: 12px;
+  font-family: var(--sans);
+}
+
+.file-view-separator {
+  margin-right: 4px;
+  color: var(--fg-muted);
+}
+
+.file-view-body {
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  overflow: hidden;
+}
+
+.file-view-meta {
+  margin: 0;
+  padding: 8px 12px;
+  font-size: 12px;
+  color: var(--fg-muted);
+  background: var(--canvas-subtle);
+  border-bottom: 1px solid var(--border);
+}
+
+.file-view-message {
+  margin: 0;
+  padding: 24px;
+  text-align: center;
+  color: var(--fg-muted);
+}
+
+.file-view-message.danger {
+  color: var(--danger-fg);
+}
+
+.file-view .code {
+  margin: 4px 0;
+}

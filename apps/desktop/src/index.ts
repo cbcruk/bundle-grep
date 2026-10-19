@@ -8,8 +8,10 @@
 export { createApi } from './api/create-api'
 export { TOKEN_HEADER } from './api/guard'
 export { createBridge } from './bridge/create-bridge'
+export { UiNotBuiltError } from './desktop.errors'
 export type {
   ApiOptions,
+  ArchiveSummary,
   Bridge,
   BridgeOptions,
   BridgeResult,
@@ -19,6 +21,7 @@ export type {
   RepoRow,
   RepoState,
   RestoreItem,
+  SearchStreamEvent,
   Settings,
   SyncItem,
   WireError,

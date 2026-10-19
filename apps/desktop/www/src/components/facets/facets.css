@@ -1,0 +1,67 @@
+.facets {
+  width: 240px;
+  flex: none;
+}
+
+.facet-group {
+  margin-bottom: 20px;
+}
+
+.facet-group h3 {
+  margin: 0 0 6px;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--fg-muted);
+}
+
+.facet-group ul {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.facet {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 4px 8px;
+  border-radius: 6px;
+  color: var(--fg);
+  text-decoration: none;
+}
+
+.facet:hover {
+  background: var(--canvas-subtle);
+}
+
+.facet.selected {
+  background: var(--accent-muted);
+  font-weight: 600;
+}
+
+.facet-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.facet-count {
+  color: var(--fg-muted);
+  font-variant-numeric: tabular-nums;
+}
+
+.facet-more {
+  margin-top: 4px;
+  padding: 2px 8px;
+  border: 0;
+  background: none;
+  color: var(--accent);
+  font: inherit;
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.facets-pending {
+  color: var(--fg-muted);
+  font-size: 12px;
+}
