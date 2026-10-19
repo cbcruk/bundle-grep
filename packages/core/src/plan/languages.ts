@@ -23,18 +23,28 @@ for (const [name, language] of Object.entries(data.languages)) {
 
 const popular = new Set<string>(data.popular)
 
+/** Shared extensions the ranking below gets wrong, pinned to the language most files with them are written in. */
+const PREFERRED: Readonly<Record<string, string>> = {
+  '.h': 'C',
+  '.sql': 'SQL',
+  '.for': 'Fortran',
+  '.d': 'D',
+  '.fs': 'F#',
+  '.v': 'Verilog',
+}
+
 type Entry = (typeof data.languages)[keyof typeof data.languages]
 
 /**
- * Orders languages competing for one extension: popular ones first, then one
- * whose primary (first) extension it is, then the one with more extensions
- * and filenames — a rough stand-in for how common it is.
+ * Orders languages competing for one extension: popular ones first, then the
+ * one with more extensions and filenames — a rough stand-in for how common it
+ * is — then one whose primary (first) extension it is.
  */
 function rank(extension: string, [name, language]: [string, Entry]): number[] {
   return [
     popular.has(name) ? 0 : 1,
-    language.extensions[0]?.toLowerCase() === extension ? 0 : 1,
     -(language.extensions.length + language.filenames.length),
+    language.extensions[0]?.toLowerCase() === extension ? 0 : 1,
   ]
 }
 
@@ -58,7 +68,7 @@ for (const entry of Object.entries(data.languages)) {
 const byExtension = new Map<string, string>(
   [...candidates].map(([extension, entries]) => [
     extension,
-    entries.toSorted((a, b) => compareRanks(rank(extension, a), rank(extension, b)))[0]![0],
+    PREFERRED[extension] ?? entries.toSorted((a, b) => compareRanks(rank(extension, a), rank(extension, b)))[0]![0],
   ]),
 )
 
@@ -67,8 +77,9 @@ const byExtension = new Map<string, string>(
  *
  * An exact filename wins over an extension, and the longest matching extension
  * wins. An extension several languages share goes to a popular language first,
- * then to one whose primary extension it is, then to the broader language — so
- * `.md` is Markdown, `.ts` TypeScript, and `.h` C++. Linguist's content
+ * then to the broader language, then to one whose primary extension it is — so
+ * `.md` is Markdown, `.yaml` YAML, and `.ts` TypeScript — with a few common
+ * misses such as `.h` (C) and `.sql` (SQL) pinned. Linguist's content
  * heuristics are not applied.
  *
  * @returns The canonical language name, or `undefined` for an unknown file type.

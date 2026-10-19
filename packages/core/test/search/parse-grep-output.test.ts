@@ -34,6 +34,12 @@ describe('parseGrepOutput', () => {
     ])
   })
 
+  test('a CRLF line loses its carriage return', () => {
+    expect(parseGrepOutput(output('HEAD:w\x001\x001\x00foo\r\n'), 'HEAD')).toEqual([
+      { path: 'w', number: 1, byteColumn: 1, text: 'foo' },
+    ])
+  })
+
   test('empty output', () => {
     expect(parseGrepOutput(Buffer.alloc(0), 'HEAD')).toEqual([])
   })

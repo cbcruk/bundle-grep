@@ -6,6 +6,7 @@
 
 import type { GitError } from '../git/git.errors'
 import type { FilterLeaf, SearchPlan } from '../plan/plan.types'
+import type { Pattern } from '../query/query.types'
 import type { PcreUnavailableError } from './search.errors'
 
 /** A repository to search. */
@@ -110,6 +111,24 @@ export type SearchEvent =
       stopped?: 'aborted' | 'timeout'
     }
 
+/** What {@linkcode collectLines} needs to extract lines from one repository. */
+export interface LineOptions {
+  /** The repository. */
+  repo: SearchRepo
+  /** The tree argument for git. */
+  ref: string
+  /** The matching files to extract lines from. */
+  files: readonly string[]
+  /** The highlight patterns, from {@linkcode SearchPlan.highlight}. */
+  patterns: readonly Pattern[]
+  /** Context lines around each match. */
+  context: number
+  /** Most matching lines per file and pattern engine. */
+  maxMatchesPerFile: number
+  /** Kills git when aborted. */
+  signal: AbortSignal
+}
+
 /** Options for {@linkcode search}. */
 export interface SearchOptions {
   /** The compiled query. */
@@ -122,9 +141,9 @@ export interface SearchOptions {
   limit?: number
   /** Context lines around each match, as git's `-C`. Defaults to `0`. */
   context?: number
-  /** Most matching lines per file. Defaults to `20`. */
+  /** Most matching lines per file and pattern engine (`-F` or `-P`). Defaults to `20`. */
   maxMatchesPerFile?: number
-  /** Repositories searched at once. Defaults to `4`. */
+  /** Repositories searched at once, at least `1`. Defaults to `4`. */
   concurrency?: number
   /** Stops the search after this many milliseconds. */
   timeoutMs?: number

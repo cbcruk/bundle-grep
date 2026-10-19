@@ -4,7 +4,8 @@ import { join } from 'node:path'
 import { compileQuery } from '../../src/plan/compile-query'
 import { parseQuery } from '../../src/query/parse-query'
 import { GitError } from '../../src/git/git.errors'
-import { search, toSearchRepoError } from '../../src/search/search'
+import { runGit as runGitAsync } from '../../src/git/run-git'
+import { collectLines, search, toSearchRepoError } from '../../src/search/search'
 import type { SearchEvent, SearchOptions, SearchRepo } from '../../src/search/search.types'
 import { createFixtureRepo, runGit, type FixtureCommit, type FixtureRepo } from '../fixture'
 
@@ -170,5 +171,59 @@ describe('toSearchRepoError', () => {
   test('any other failure passes through', () => {
     const error = new GitError({ args: ['grep'], exitCode: 128, stderr: 'fatal: bad revision', message: 'x' })
     expect(toSearchRepoError(error)).toBe(error)
+  })
+})
+
+describe('search edge cases', () => {
+  test('a throwing holds rejects instead of yielding done', async () => {
+    const plan = parseQuery('useState repo:x').andThen(compileQuery).unwrap()
+    const events: SearchEvent[] = []
+    const run = async (): Promise<void> => {
+      for await (const event of search({ plan, repos, holds: () => { throw new Error('boom') } })) events.push(event)
+    }
+    expect(run()).rejects.toThrow('boom')
+    await run().catch(() => undefined)
+    expect(events.some(event => event.type === 'done')).toBe(false)
+  })
+
+  test('the first column is the earliest across pattern engines', async () => {
+    const lines = await collectLines({
+      repo: repos[0]!,
+      ref: 'HEAD',
+      files: ['README.md'],
+      patterns: [
+        { kind: 'regex', source: 'h.llo' },
+        { kind: 'literal', value: 'State', quoted: false },
+      ],
+      context: 0,
+      maxMatchesPerFile: 20,
+      signal: new AbortController().signal,
+    })
+    expect(lines.unwrap().get('README.md')).toMatchObject([{ column: 0, ranges: [{ start: 0, end: 5 }, { start: 9, end: 14 }] }])
+  })
+
+  test('too many long paths fall back to filtering instead of overflowing the command line', async () => {
+    const files = ['README.md', ...Array.from({ length: 400 }, (_, i) => `${'x'.repeat(200)}/${i}.md`)]
+    const lines = await collectLines({
+      repo: repos[0]!,
+      ref: 'HEAD',
+      files,
+      patterns: [{ kind: 'literal', value: 'héllo', quoted: false }],
+      context: 0,
+      maxMatchesPerFile: 20,
+      signal: new AbortController().signal,
+    })
+    expect([...lines.unwrap().keys()]).toEqual(['README.md'])
+  })
+
+  test('concurrency below 1 still searches', async () => {
+    expect(files(await collect('content:useState', { concurrency: 0 }))).toHaveLength(3)
+  })
+})
+
+describe('runGit', () => {
+  test('an argument list the OS refuses is an error value, not a throw', async () => {
+    const result = await runGitAsync(['grep', '-e', 'x'.repeat(4 * 1024 * 1024)], { cwd: repos[0]!.gitDir })
+    expect(result.isErr()).toBe(true)
   })
 })

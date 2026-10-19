@@ -33,6 +33,18 @@ describe('createHighlighter', () => {
     expect(createHighlighter([{ kind: 'regex', source: 'a++' }])('aaa')).toEqual([])
   })
 
+  test('ranges never split a surrogate pair', () => {
+    expect(createHighlighter([{ kind: 'regex', source: '😀.' }])('😀😀')).toEqual([{ start: 0, end: 4 }])
+  })
+
+  test('a PCRE escape JavaScript lacks gives no ranges rather than wrong ones', () => {
+    expect(createHighlighter([{ kind: 'regex', source: '\\Afoo' }])('Afoo foo')).toEqual([])
+  })
+
+  test('a leading (?i) is accepted', () => {
+    expect(createHighlighter([{ kind: 'regex', source: '(?i)FOO' }])('foo')).toEqual([{ start: 0, end: 3 }])
+  })
+
   test('empty matches are skipped without looping', () => {
     expect(createHighlighter([{ kind: 'regex', source: 'x*' }])('abc')).toEqual([])
   })
