@@ -21,13 +21,32 @@ function contentLeaf(pattern: Pattern): GrepLeaf {
     : { op: 'grep', engine: 'pcre', patterns: [pattern.source], match: 'any' }
 }
 
-function isValidRegex(source: string): Result<void, string> {
+function isValidRegex(source: string, ignoreCase: boolean): Result<void, string> {
   return Result.try({
-    try: () => void new RegExp(source, 'i'),
+    try: () => void new RegExp(source, ignoreCase ? 'i' : ''),
     catch: cause => (cause instanceof Error ? cause.message : String(cause)),
   })
 }
 
+/**
+ * Builds a path leaf from a regex source, honouring a leading `(?-i)`.
+ *
+ * JavaScript has no inline `(?-i)`, so it is taken off and becomes the flag.
+ *
+ * @returns The leaf, or the reason JavaScript cannot compile the source.
+ */
+function pathRegexLeaf(source: string): Result<PathLeaf, string> {
+  const caseSensitive = source.startsWith('(?-i)')
+  const regex = caseSensitive ? source.slice('(?-i)'.length) : source
+  return isValidRegex(regex, !caseSensitive).map(() => ({ op: 'path', regex, ignoreCase: !caseSensitive }))
+}
+
+/**
+ * Compiles one term or `content:`/`path:` qualifier.
+ *
+ * A bare term matches the path too, but never as a glob. A regex only PCRE
+ * understands keeps just its content half, which git reports on if invalid.
+ */
 function compileMatch(node: MatchNode): Compiled {
   const { field, pattern } = node
 
@@ -36,26 +55,22 @@ function compileMatch(node: MatchNode): Compiled {
   if (field === 'path') {
     if (pattern.kind === 'literal') {
       const regex = pattern.quoted ? escapeRegex(pattern.value) : globToRegex(pattern.value)
-      return Result.ok({ op: 'path', regex })
+      return Result.ok({ op: 'path', regex, ignoreCase: true })
     }
-    const valid = isValidRegex(pattern.source)
-    if (valid.isErr()) {
-      const reason = valid.error.replace(/^Invalid regular expression: (\/.*\/[a-z]*: )?/, '')
+    const leaf = pathRegexLeaf(pattern.source)
+    if (leaf.isErr()) {
+      const reason = leaf.error.replace(/^Invalid regular expression: (\/.*\/[a-z]*: )?/, '')
       return Result.err(
         new QueryCompileError({ message: `Invalid regular expression for path: ${reason}`, span: node.span }),
       )
     }
-    return Result.ok({ op: 'path', regex: pattern.source })
+    return Result.ok(leaf.value)
   }
 
-  // A bare term matches the path too, but never as a glob. A regex that only
-  // PCRE understands, such as `(?-i)`, keeps its content half.
   const path: PathLeaf | undefined =
     pattern.kind === 'literal'
-      ? { op: 'path', regex: escapeRegex(pattern.value) }
-      : isValidRegex(pattern.source).isOk()
-        ? { op: 'path', regex: pattern.source }
-        : undefined
+      ? { op: 'path', regex: escapeRegex(pattern.value), ignoreCase: true }
+      : pathRegexLeaf(pattern.source).unwrapOr(undefined)
   return Result.ok(path ? { op: 'or', children: [contentLeaf(pattern), path] } : contentLeaf(pattern))
 }
 

@@ -8,37 +8,20 @@ import { Result } from 'better-result'
 import { spawn } from 'node:child_process'
 
 import { GitError } from './git.errors'
-
-/** Options for {@linkcode runGit}. */
-export interface RunGitOptions {
-  /** The repository to run in: a work tree or a bare repository. */
-  cwd: string
-  /**
-   * Exit statuses that count as success, besides `0`.
-   *
-   * `git grep` exits with `1` when nothing matches, which is an answer rather
-   * than a failure.
-   */
-  allowExitCodes?: readonly number[]
-}
-
-/** What a successful git run produced. */
-export interface GitOutput {
-  /** Everything git wrote to stdout. */
-  stdout: Buffer
-  /** The exit status, `0` or one of {@linkcode RunGitOptions.allowExitCodes}. */
-  exitCode: number
-}
+import type { GitOutput, RunGitOptions } from './git.types'
 
 /**
  * Runs git with the given arguments and waits for it to exit.
+ *
+ * Colour is forced off, since a user's `color.ui=always` would otherwise put
+ * escape codes into output that is parsed.
  *
  * @returns The output, or a {@linkcode GitError} when git cannot start or
  * exits with a status outside `0` and `allowExitCodes`.
  */
 export function runGit(args: readonly string[], options: RunGitOptions): Promise<Result<GitOutput, GitError>> {
   return new Promise(resolve => {
-    const child = spawn('git', args, { cwd: options.cwd, stdio: ['ignore', 'pipe', 'pipe'] })
+    const child = spawn('git', ['-c', 'color.ui=never', ...args], { cwd: options.cwd, stdio: ['ignore', 'pipe', 'pipe'] })
     const stdout: Buffer[] = []
     const stderr: Buffer[] = []
     child.stdout.on('data', (chunk: Buffer) => stdout.push(chunk))

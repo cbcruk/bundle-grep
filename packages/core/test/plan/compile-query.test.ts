@@ -23,11 +23,11 @@ const fixed = (...patterns: string[]): unknown => ({ op: 'grep', engine: 'fixed'
 
 describe('terms', () => {
   test('a bare term matches contents or path', () => {
-    expect(expr('useState')).toEqual({ op: 'or', children: [fixed('useState'), { op: 'path', regex: 'useState' }] })
+    expect(expr('useState')).toEqual({ op: 'or', children: [fixed('useState'), { op: 'path', regex: 'useState', ignoreCase: true }] })
   })
 
   test('regex metacharacters in a literal are escaped for the path test', () => {
-    expect(expr('a.b(')).toEqual({ op: 'or', children: [fixed('a.b('), { op: 'path', regex: 'a\\.b\\(' }] })
+    expect(expr('a.b(')).toEqual({ op: 'or', children: [fixed('a.b('), { op: 'path', regex: 'a\\.b\\(', ignoreCase: true }] })
   })
 
   test('a bare regex matches contents with PCRE or the path with the same source', () => {
@@ -35,13 +35,23 @@ describe('terms', () => {
       op: 'or',
       children: [
         { op: 'grep', engine: 'pcre', patterns: ['use[A-Z]\\w+'], match: 'any' },
-        { op: 'path', regex: 'use[A-Z]\\w+' },
+        { op: 'path', regex: 'use[A-Z]\\w+', ignoreCase: true },
       ],
     })
   })
 
   test('a bare regex JavaScript cannot compile still searches contents', () => {
-    expect(expr('/(?-i)True/')).toEqual({ op: 'grep', engine: 'pcre', patterns: ['(?-i)True'], match: 'any' })
+    expect(expr('/a++/')).toEqual({ op: 'grep', engine: 'pcre', patterns: ['a++'], match: 'any' })
+  })
+
+  test('a leading (?-i) makes the path half case-sensitive', () => {
+    expect(expr('/(?-i)True/')).toEqual({
+      op: 'or',
+      children: [
+        { op: 'grep', engine: 'pcre', patterns: ['(?-i)True'], match: 'any' },
+        { op: 'path', regex: 'True', ignoreCase: false },
+      ],
+    })
   })
 
   test('content: searches only contents', () => {
@@ -62,7 +72,7 @@ describe('path:', () => {
     ['path:/src/**', '^src/.*$'],
     ['path:/^src\\//', '^src/'],
   ])('%s', (query, regex) => {
-    expect(expr(query)).toEqual({ op: 'path', regex })
+    expect(expr(query)).toEqual({ op: 'path', regex, ignoreCase: true })
   })
 
   test('an invalid regex', () => {
@@ -135,7 +145,7 @@ describe('boolean structure', () => {
   test('NOT complements', () => {
     expect(expr('content:a NOT path:test')).toEqual({
       op: 'and',
-      children: [fixed('a'), { op: 'not', child: { op: 'path', regex: 'test' } }],
+      children: [fixed('a'), { op: 'not', child: { op: 'path', regex: 'test', ignoreCase: true } }],
     })
   })
 

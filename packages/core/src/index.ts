@@ -7,9 +7,7 @@
 
 export { GitError } from './git/git.errors'
 export { compileQuery } from './plan/compile-query'
-export { grepArgs } from './plan/grep-args'
-export { listMatchingFiles, narrowingPathspecs } from './plan/list-matching-files'
-export type { ListMatchingFilesOptions } from './plan/list-matching-files'
+export { listMatchingFiles } from './plan/list-matching-files'
 export { QueryCompileError } from './plan/plan.errors'
 export type {
   AllLeaf,
@@ -18,7 +16,9 @@ export type {
   FileLeaf,
   FilterLeaf,
   GrepLeaf,
+  Language,
   LanguageLeaf,
+  ListMatchingFilesOptions,
   NoneLeaf,
   PathLeaf,
   QueryExpr,

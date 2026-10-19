@@ -8,12 +8,12 @@ import type { Expr, GrepLeaf } from './plan.types'
 
 type Node<Leaf> = Expr<Leaf | GrepLeaf>
 
-function isGrep<Leaf>(node: Node<Leaf>): node is GrepLeaf {
-  return (node as { op: string }).op === 'grep'
+function isGrep<Leaf extends { op: string }>(node: Node<Leaf>): node is GrepLeaf {
+  return node.op === 'grep'
 }
 
-function opOf<Leaf>(node: Node<Leaf>): string {
-  return (node as { op: string }).op
+function opOf<Leaf extends { op: string }>(node: Node<Leaf>): string {
+  return node.op
 }
 
 /**
@@ -22,7 +22,7 @@ function opOf<Leaf>(node: Node<Leaf>): string {
  * Under `and` they become one `--all-match` grep and under `or` one grep with
  * several patterns, which is the same file set from one process.
  */
-function mergeGreps<Leaf>(op: 'and' | 'or', children: Node<Leaf>[]): Node<Leaf>[] {
+function mergeGreps<Leaf extends { op: string }>(op: 'and' | 'or', children: Node<Leaf>[]): Node<Leaf>[] {
   const match = op === 'and' ? 'all' : 'any'
   const merged = new Map<GrepLeaf['engine'], GrepLeaf>()
   const rest: Node<Leaf>[] = []
@@ -49,7 +49,7 @@ function mergeGreps<Leaf>(op: 'and' | 'or', children: Node<Leaf>[]): Node<Leaf>[
  * Flattens nested `and`/`or`, absorbs `all` and `none`, cancels double
  * negation, and merges `grep` leaves.
  */
-export function simplify<Leaf>(node: Node<Leaf>): Node<Leaf> {
+export function simplify<Leaf extends { op: string }>(node: Node<Leaf>): Node<Leaf> {
   const op = opOf(node)
 
   if (op === 'not') {
