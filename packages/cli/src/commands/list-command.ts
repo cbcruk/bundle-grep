@@ -10,7 +10,9 @@ import { parseCommandArgs } from '../args'
 import type { Command, Io } from '../cli.types'
 import { EXIT } from '../exit-codes'
 import { printable, stylesFor } from '../format/ansi'
+import { formatNotice } from '../format/status-line'
 import { layoutFor } from '../layout'
+import type { ListRow, ListState } from './commands.types'
 
 const USAGE = `Usage: bundle-grep list [options]
 
@@ -28,27 +30,19 @@ Options:
   -h, --help       show this help
 `
 
-/** Whether a listed repository can be searched. */
-type State = 'ready' | 'unrestored' | 'empty'
-
-interface Row {
-  name: string
-  state: State
-  metadata: RepoMetadata | null
-}
-
 function flagsOf(metadata: RepoMetadata | null): string {
   if (!metadata) return ''
   return [metadata.isFork && 'fork', metadata.isArchived && 'archived', metadata.isPrivate && 'private'].filter(Boolean).join(',')
 }
 
-async function rowOf(entry: ArchiveEntry, state: State): Promise<Row> {
+async function rowOf(entry: ArchiveEntry, state: ListState): Promise<ListRow> {
   const metadata = await readMetadata(entry.paths.metadata)
   return { name: `${entry.owner}/${entry.name}`, state, metadata: metadata.unwrapOr(undefined) ?? null }
 }
 
 async function run(args: string[], io: Io): Promise<number> {
   const styles = stylesFor(io.color)
+  const errors = stylesFor(io.errorColor)
   const parsed = parseCommandArgs(args, {})
   if (parsed.isErr()) {
     io.error(`${parsed.error.message}\n\n${USAGE}`)
@@ -66,16 +60,19 @@ async function run(args: string[], io: Io): Promise<number> {
 
   const loaded = await loadArchivedRepos(layoutFor(values.root, io.env))
   if (loaded.isErr()) {
-    io.error(`${styles.red('error:')} ${loaded.error.message}\n`)
+    io.error(formatNotice('error', loaded.error.message, errors))
     return EXIT.error
   }
   const { repos, unrestored, empty, invalid } = loaded.value
-  const rows = [
+  const rows: ListRow[] = [
     ...repos.map(repo => ({ name: repo.name, state: 'ready' as const, metadata: repo.metadata ?? null })),
     ...(await Promise.all(unrestored.map(entry => rowOf(entry, 'unrestored')))),
     ...(await Promise.all(empty.map(entry => rowOf(entry, 'empty')))),
   ].sort((a, b) => (a.name < b.name ? -1 : a.name > b.name ? 1 : 0))
-  for (const error of invalid) io.error(`${styles.yellow('warning:')} ${error.message}\n`)
+  for (const error of invalid) io.error(formatNotice('warning', error.message, errors))
+  if (rows.length === 0 && invalid.length === 0) {
+    io.error(formatNotice('warning', 'nothing is archived yet; run `bundle-grep sync <owner>` first', errors))
+  }
 
   if (values.json) {
     io.write(`${JSON.stringify(rows, null, 2)}\n`)
@@ -84,7 +81,8 @@ async function run(args: string[], io: Io): Promise<number> {
     for (const row of rows) {
       const state = row.state === 'ready' ? styles.green(row.state.padEnd(10)) : styles.yellow(row.state.padEnd(10))
       const details = [row.metadata?.primaryLanguage, flagsOf(row.metadata), row.metadata && `synced ${row.metadata.syncedAt.slice(0, 10)}`]
-      io.write(`${printable(row.name.padEnd(width))}  ${state}  ${styles.dim(details.filter(Boolean).join('  '))}`.trimEnd() + '\n')
+      const shown = details.filter(Boolean).join('  ')
+      io.write(`${printable(row.name.padEnd(width))}  ${state}${shown ? `  ${styles.dim(printable(shown))}` : ''}\n`)
     }
   }
   return invalid.length > 0 ? EXIT.none : EXIT.ok

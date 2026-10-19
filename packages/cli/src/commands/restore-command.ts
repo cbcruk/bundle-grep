@@ -10,6 +10,7 @@ import { parseCommandArgs } from '../args'
 import type { Command, Io } from '../cli.types'
 import { EXIT } from '../exit-codes'
 import { stylesFor } from '../format/ansi'
+import { formatFailure, formatNotice, formatStatus } from '../format/status-line'
 import { layoutFor } from '../layout'
 
 const USAGE = `Usage: bundle-grep restore [<owner>|<owner>/<name>]... [options]
@@ -37,6 +38,7 @@ export function isWanted(entry: ArchiveEntry, wanted: readonly string[]): boolea
 
 async function run(args: string[], io: Io): Promise<number> {
   const styles = stylesFor(io.color)
+  const errors = stylesFor(io.errorColor)
   const parsed = parseCommandArgs(args, {})
   if (parsed.isErr()) {
     io.error(`${parsed.error.message}\n\n${USAGE}`)
@@ -51,12 +53,13 @@ async function run(args: string[], io: Io): Promise<number> {
   const layout = layoutFor(values.root, io.env)
   const listed = await listArchive(layout)
   if (listed.isErr()) {
-    io.error(`${styles.red('error:')} ${listed.error.message}\n`)
+    io.error(formatNotice('error', listed.error.message, errors))
     return EXIT.error
   }
   const entries = listed.value.filter(entry => isWanted(entry, positionals))
   const unmatched = positionals.filter(item => !listed.value.some(entry => isWanted(entry, [item])))
-  for (const item of unmatched) io.error(`${styles.yellow('warning:')} nothing archived matches ${item}\n`)
+  for (const item of unmatched) io.error(formatNotice('warning', `nothing archived matches ${item}`, errors))
+  if (listed.value.length === 0) io.error(formatNotice('warning', 'nothing is archived yet; run `bundle-grep sync <owner>` first', errors))
 
   let failed = unmatched.length > 0
   for await (const event of restoreRepos(entries, { ...layout, signal: io.signal })) {
@@ -64,12 +67,12 @@ async function run(args: string[], io: Io): Promise<number> {
     if (event.type === 'failed') {
       failed = true
       if (values.json) io.write(`${JSON.stringify({ type: 'failed', repo, error: event.error.message })}\n`)
-      else io.error(`${styles.red('failed')}    ${repo}: ${event.error.message}\n`)
-      continue
+      else io.error(formatFailure(repo, event.error.message, errors))
+    } else if (values.json) {
+      io.write(`${JSON.stringify({ type: 'restored', repo, status: event.outcome.status })}\n`)
+    } else {
+      io.write(formatStatus(event.outcome.status, repo, styles))
     }
-    const { status } = event.outcome
-    if (values.json) io.write(`${JSON.stringify({ type: 'restored', repo, status })}\n`)
-    else io.write(`${status === 'unchanged' || status === 'empty' ? styles.dim(status.padEnd(9)) : styles.green(status.padEnd(9))} ${repo}\n`)
   }
   if (io.signal?.aborted) return EXIT.error
   return failed ? EXIT.none : EXIT.ok

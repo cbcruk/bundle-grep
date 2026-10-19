@@ -37,6 +37,7 @@ Run \`bundle-grep <command> --help\` for a command's options.
  *   error: text => process.stderr.write(text),
  *   env: process.env,
  *   color: false,
+ *   errorColor: false,
  *   interactive: false,
  * });
  * ```

@@ -39,6 +39,11 @@ export interface SyncTarget {
 export interface SyncOptions extends ArchiveLayout {
   /** Stops the sync, killing any git still running. */
   signal?: AbortSignal
+  /**
+   * Extra environment for git, over the process's own; `undefined` unsets a
+   * variable. `GIT_TERMINAL_PROMPT` is always `0`.
+   */
+  env?: Record<string, string | undefined>
   /** Returns the time recorded as {@linkcode RepoMetadata.syncedAt}; the current time by default. */
   now?: () => Date
 }

@@ -85,7 +85,7 @@ export function syncRepo(target: SyncTarget, options: SyncOptions): Promise<Resu
   return Result.gen(async function* () {
     const paths = yield* archivePaths(options, target.owner, target.name)
     const git = (args: string[], allowExitCodes?: number[]): Promise<Result<GitOutput, GitError>> =>
-      runGit(args, { cwd: paths.gitDir, env: { GIT_TERMINAL_PROMPT: '0' }, signal: options.signal, allowExitCodes })
+      runGit(args, { cwd: paths.gitDir, env: { ...options.env, GIT_TERMINAL_PROMPT: '0' }, signal: options.signal, allowExitCodes })
 
     yield* Result.await(fileSystem(paths.gitDir, () => mkdir(paths.gitDir, { recursive: true })))
     yield* Result.await(git(['init', '--quiet', '--bare', '.']))

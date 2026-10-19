@@ -196,6 +196,16 @@ describe('syncRepo', () => {
     expect(readFileSync(outcome.unwrap().paths.metadata, 'utf8')).not.toContain('user')
   })
 
+  test('passes extra environment to git', async () => {
+    using fixture = createFixtureRepo(FIRST)
+    const { options, target } = setup(fixture)
+    const url = 'https://git.example.invalid/acme/widgets'
+    const env = { GIT_CONFIG_COUNT: '1', GIT_CONFIG_KEY_0: `url.${fixture.repo}.insteadOf`, GIT_CONFIG_VALUE_0: url }
+
+    expect((await syncRepo({ ...target, url }, { ...options, env })).unwrap().status).toBe('created')
+    expect((await syncRepo({ ...target, url }, options)).isErr()).toBe(true)
+  })
+
   test('rebuilds a bundle whose metadata is unreadable', async () => {
     using fixture = createFixtureRepo(FIRST)
     const { options, target } = setup(fixture)

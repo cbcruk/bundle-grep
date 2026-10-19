@@ -4,22 +4,20 @@
  * @module
  */
 
-import {
-  listGithubRepos,
-  syncRepos,
-  targetFromUrl,
-  viewGithubRepo,
-  type GhError,
-  type InvalidRepoNameError,
-  type SyncTarget,
-} from '@bundle-grep/core'
+import { listGithubRepos, syncRepos, targetFromUrl, viewGithubRepo, type SyncTarget } from '@bundle-grep/core'
 import { Result } from 'better-result'
+import { existsSync } from 'node:fs'
+import { resolve } from 'node:path'
 
 import { parseCommandArgs, wholeNumber } from '../args'
 import type { Command, Io } from '../cli.types'
 import { EXIT } from '../exit-codes'
+import { expandHome } from '../expand-home'
 import { stylesFor } from '../format/ansi'
+import { formatFailure, formatNotice, formatStatus } from '../format/status-line'
 import { layoutFor } from '../layout'
+import { batchSshEnv, hasSshCommandConfig } from '../ssh-env'
+import type { Resolved, TargetError } from './commands.types'
 
 const USAGE = `Usage: bundle-grep sync <source>... [options]
 
@@ -28,41 +26,50 @@ Archives repositories as bundles and refreshes their search caches.
 Sources:
   <owner>          every repository of a GitHub user or organisation, via gh
   <owner>/<name>   one GitHub repository, via gh
-  <url>|<path>     any git URL, or a local path starting with /, . or ~
+  <url>            any git URL, such as https://… or git@host:owner/name
+  <path>           a local repository; prefix a relative one with ./ if it
+                   could be read as <owner>/<name>
 
 Options:
-  --limit <n>      most repositories to list per owner (default 1000)
+  --limit <n>      fail for an owner with more repositories than this (default 1000)
   --root <dir>     where the archive lives (default $BUNDLE_GREP_ROOT or ~/.bundle-grep)
-  --json           print one JSON object per repository
+  --json           print one JSON object per source or repository
   -h, --help       show this help
 `
 
-const LOCATION = /^(?:[a-z][a-z0-9+.-]*:\/\/|[^/@\s]+@[^/:\s]+:|[./~])/i
+const URL_LIKE = /^[a-z][a-z0-9+.-]*:\/\/|^[^/\s]+:/i
 const GITHUB = /^(?:https:\/\/github\.com\/|git@github\.com:|ssh:\/\/git@github\.com\/)/i
-
-type TargetError = GhError | InvalidRepoNameError
 
 /**
  * Turns one source argument into sync targets.
  *
  * A GitHub URL is looked up with `gh` so that `is:fork` and `is:archived`
- * work, but keeps the URL as given, so an SSH URL is still fetched over SSH.
+ * work, but keeps the URL as given, so an SSH URL is still fetched over SSH;
+ * when `gh` cannot help, the repository is synced anyway with a warning.
+ * Local paths are made absolute, as git runs them from the cache directory.
  */
-export async function targetsFor(source: string, io: Io, limit: number): Promise<Result<SyncTarget[], TargetError>> {
+export async function targetsFor(source: string, io: Io, limit: number): Promise<Result<Resolved, TargetError>> {
   const options = { gh: io.gh, signal: io.signal }
-  if (LOCATION.test(source)) {
+  const one = (target: SyncTarget, warning?: string): Resolved => ({ targets: [target], ...(warning ? { warning } : {}) })
+
+  if (URL_LIKE.test(source)) {
     const parsed = targetFromUrl(source)
-    if (parsed.isErr() || !GITHUB.test(parsed.value.url)) return parsed.map(target => [target])
+    if (parsed.isErr() || !GITHUB.test(parsed.value.url)) return parsed.map(target => one(target))
     const target = parsed.value
     const viewed = await viewGithubRepo(`${target.owner}/${target.name}`, options)
-    return viewed.map(found => [{ ...found, url: target.url }])
+    if (viewed.isOk()) return Result.ok(one({ ...viewed.value, url: target.url }))
+    return Result.ok(one(target, `could not look ${target.owner}/${target.name} up with gh, so whether it is a fork or archived is unknown: ${viewed.error.message}`))
   }
-  if (source.includes('/')) return (await viewGithubRepo(source, options)).map(target => [target])
-  return listGithubRepos(source, { ...options, limit })
+  if (/^[./~]/.test(source) || existsSync(source)) {
+    return targetFromUrl(resolve(expandHome(source))).map(target => one(target))
+  }
+  if (source.includes('/')) return (await viewGithubRepo(source, options)).map(target => one(target))
+  return (await listGithubRepos(source, { ...options, limit })).map(targets => ({ targets }))
 }
 
 async function run(args: string[], io: Io): Promise<number> {
   const styles = stylesFor(io.color)
+  const errors = stylesFor(io.errorColor)
   const parsed = parseCommandArgs(args, { limit: { type: 'string' } }).andThen(({ values, positionals }) =>
     wholeNumber('limit', values.limit, 1000, 1).map(limit => ({ values, positionals, limit })),
   )
@@ -80,8 +87,6 @@ async function run(args: string[], io: Io): Promise<number> {
     return EXIT.error
   }
 
-  if (!io.interactive && io.env.GIT_SSH_COMMAND === undefined) io.env.GIT_SSH_COMMAND = 'ssh -o BatchMode=yes'
-
   let failed = false
   const targets = new Map<string, SyncTarget>()
   for (const source of positionals) {
@@ -89,24 +94,29 @@ async function run(args: string[], io: Io): Promise<number> {
     if (found.isErr()) {
       failed = true
       if (values.json) io.write(`${JSON.stringify({ type: 'failed', source, error: found.error.message })}\n`)
-      else io.error(`${styles.red('failed')}    ${source}: ${found.error.message}\n`)
+      else io.error(formatFailure(source, found.error.message, errors))
       continue
     }
-    for (const target of found.value) targets.set(`${target.owner}/${target.name}`.toLowerCase(), target)
+    if (found.value.warning) io.error(formatNotice('warning', found.value.warning, errors))
+    for (const target of found.value.targets) {
+      const key = `${target.owner}/${target.name}`.toLowerCase()
+      if (!targets.has(key)) targets.set(key, target)
+    }
   }
 
+  const env = batchSshEnv(io.env, io.interactive, !io.interactive && hasSshCommandConfig())
   const layout = layoutFor(values.root, io.env)
-  for await (const event of syncRepos(targets.values(), { ...layout, signal: io.signal })) {
+  for await (const event of syncRepos(targets.values(), { ...layout, env, signal: io.signal })) {
     const repo = `${event.target.owner}/${event.target.name}`
     if (event.type === 'failed') {
       failed = true
       if (values.json) io.write(`${JSON.stringify({ type: 'failed', repo, error: event.error.message })}\n`)
-      else io.error(`${styles.red('failed')}    ${repo}: ${event.error.message}\n`)
-      continue
+      else io.error(formatFailure(repo, event.error.message, errors))
+    } else if (values.json) {
+      io.write(`${JSON.stringify({ type: 'synced', repo, status: event.outcome.status })}\n`)
+    } else {
+      io.write(formatStatus(event.outcome.status, repo, styles))
     }
-    const { status } = event.outcome
-    if (values.json) io.write(`${JSON.stringify({ type: 'synced', repo, status })}\n`)
-    else io.write(`${status === 'unchanged' || status === 'empty' ? styles.dim(status.padEnd(9)) : styles.green(status.padEnd(9))} ${repo}\n`)
   }
   if (io.signal?.aborted) return EXIT.error
   return failed ? EXIT.none : EXIT.ok

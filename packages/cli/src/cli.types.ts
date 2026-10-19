@@ -10,10 +10,12 @@ export interface Io {
   write(text: string): void
   /** Writes to standard error. */
   error(text: string): void
-  /** The environment; `sync` may add `GIT_SSH_COMMAND` to it, so pass `process.env` to affect git. */
+  /** The environment, read for `BUNDLE_GREP_ROOT` and ssh settings; git itself sees the process's own. */
   env: Record<string, string | undefined>
-  /** Whether to color output with ANSI escapes. */
+  /** Whether to color standard output with ANSI escapes. */
   color: boolean
+  /** Whether to color standard error with ANSI escapes. */
+  errorColor: boolean
   /** Whether a person is at the terminal to answer prompts. */
   interactive: boolean
   /** Stops the command, killing any git still running. */

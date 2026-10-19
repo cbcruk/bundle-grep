@@ -4,13 +4,10 @@
  * @module
  */
 
-import type { MatchRange, SearchEvent, SearchLine } from '@bundle-grep/core'
+import type { MatchRange, SearchLine } from '@bundle-grep/core'
 
 import { printable } from './ansi'
-import type { Styles } from './format.types'
-
-type FileEvent = Extract<SearchEvent, { type: 'file' }>
-type DoneEvent = Extract<SearchEvent, { type: 'done' }>
+import type { DoneEvent, FileEvent, Styles } from './format.types'
 
 function highlight(text: string, ranges: readonly MatchRange[], styles: Styles): string {
   let out = ''
@@ -33,7 +30,8 @@ function formatLine(path: string, line: SearchLine, styles: Styles): string {
  * Formats one matching file as `path:line:column:text` lines.
  *
  * Context lines read `path-line-text`. With `separate`, as when context is
- * shown, `--` goes between runs of lines that are not adjacent. A file that matched on its path alone is just its path.
+ * shown, `--` goes between runs of lines that are not adjacent. A file that
+ * matched on its path alone is just its path.
  * Columns are 1-based and count UTF-16 code units.
  */
 export function formatFile(event: FileEvent, styles: Styles, separate: boolean): string {
@@ -55,7 +53,7 @@ export function formatRepoHeading(repo: string, first: boolean, styles: Styles):
 }
 
 /**
- * Summarises a finished search in one line, such as `12 files in 3 repositories`.
+ * Summarises a finished search, such as `12 files in 3 repositories`, without a line break.
  *
  * Says when the results were cut at the limit, and when the search stopped
  * early.
@@ -66,7 +64,7 @@ export function formatSummary(done: DoneEvent, shown: number): string {
   if (done.truncated) parts.push(`showing ${shown}; raise --limit for more`)
   if (done.stopped === 'aborted') parts.push('stopped early')
   if (done.stopped === 'timeout') parts.push('timed out')
-  return `${parts.join(', ')}\n`
+  return parts.join(', ')
 }
 
 function plural(count: number, one: string, many = `${one}s`): string {
