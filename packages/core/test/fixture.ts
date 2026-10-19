@@ -27,7 +27,7 @@ export interface FixtureRepo extends Disposable {
   root: string
   /** The working repository the commits were made in. */
   repo: string
-  /** A bundle of the repository's complete history. */
+  /** A bundle of the repository's complete history; not created when there are no commits. */
   bundle: string
   /** Runs git in the working repository and returns its trimmed stdout. */
   git(...args: string[]): string
@@ -91,7 +91,7 @@ export function createFixtureRepo(commits: FixtureCommit[]): FixtureRepo {
     runGit(repo, ['commit', '--quiet', '--message', commit.message])
   }
 
-  runGit(repo, ['bundle', 'create', bundle, '--all'])
+  if (commits.length > 0) runGit(repo, ['bundle', 'create', bundle, '--all'])
 
   return {
     root,

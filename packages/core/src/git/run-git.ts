@@ -4,9 +4,9 @@
  * @module
  */
 
-import { Result } from 'better-result'
-import { spawn } from 'node:child_process'
+import type { Result } from 'better-result'
 
+import { runProcess } from '../process/run-process'
 import { GitError } from './git.errors'
 import type { GitOutput, RunGitOptions } from './git.types'
 
@@ -21,54 +21,17 @@ import type { GitOutput, RunGitOptions } from './git.types'
  * @returns The output, or a {@linkcode GitError} when git cannot start or
  * exits with a status outside `0` and `allowExitCodes`.
  */
-export function runGit(args: readonly string[], options: RunGitOptions): Promise<Result<GitOutput, GitError>> {
-  return new Promise(resolve => {
-    // spawn throws synchronously for some failures, such as E2BIG.
-    const spawned = Result.try(() =>
-      spawn('git', ['-c', 'color.ui=never', ...args], {
-        cwd: options.cwd,
-        stdio: ['ignore', 'pipe', 'pipe'],
-        signal: options.signal,
+export async function runGit(args: readonly string[], options: RunGitOptions): Promise<Result<GitOutput, GitError>> {
+  const result = await runProcess('git', ['-c', 'color.ui=never', ...args], options)
+  return result.mapError(
+    failure =>
+      new GitError({
+        args,
+        exitCode: failure.exitCode,
+        stderr: failure.stderr,
+        message: failure.started ? `git ${args[0] ?? ''} ${failure.reason}` : `Could not run git: ${failure.reason}`,
       }),
-    )
-    if (spawned.isErr()) {
-      const cause = spawned.error.cause
-      const reason = cause instanceof Error ? cause.message : String(cause)
-      resolve(Result.err(new GitError({ args, exitCode: null, stderr: '', message: `Could not run git: ${reason}` })))
-      return
-    }
-    const child = spawned.value
-    const stdout: Buffer[] = []
-    const stderr: Buffer[] = []
-    child.stdout.on('data', (chunk: Buffer) => stdout.push(chunk))
-    child.stderr.on('data', (chunk: Buffer) => stderr.push(chunk))
-
-    child.on('error', cause => {
-      resolve(
-        Result.err(
-          new GitError({ args, exitCode: null, stderr: '', message: `Could not run git: ${cause.message}` }),
-        ),
-      )
-    })
-
-    child.on('close', exitCode => {
-      const errorText = Buffer.concat(stderr).toString('utf8').trim()
-      if (exitCode === 0 || (exitCode !== null && options.allowExitCodes?.includes(exitCode))) {
-        resolve(Result.ok({ stdout: Buffer.concat(stdout), exitCode }))
-        return
-      }
-      resolve(
-        Result.err(
-          new GitError({
-            args,
-            exitCode,
-            stderr: errorText,
-            message: `git ${args[0] ?? ''} failed${exitCode === null ? '' : ` with exit code ${exitCode}`}: ${errorText}`,
-          }),
-        ),
-      )
-    })
-  })
+  )
 }
 
 /** Splits NUL-terminated output, as produced by git's `-z`, into its entries. */

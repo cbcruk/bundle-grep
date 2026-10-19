@@ -5,7 +5,14 @@
  * @module
  */
 
+export { FileSystemError, InvalidRepoNameError } from './archive/archive.errors'
+export { archivePaths } from './archive/archive-paths'
+export type { ArchiveLayout, ArchivePaths, RepoMetadata } from './archive/archive.types'
+export { readMetadata, writeMetadata } from './archive/metadata'
 export { GitError } from './git/git.errors'
+export { GhError } from './github/github.errors'
+export { listGithubRepos, viewGithubRepo } from './github/github-repos'
+export type { GithubOptions, ListGithubReposOptions } from './github/github.types'
 export { compileQuery } from './plan/compile-query'
 export { languageOf } from './plan/languages'
 export { listMatchingFiles } from './plan/list-matching-files'
@@ -39,6 +46,9 @@ export type {
   SearchRepoError,
 } from './search/search.types'
 export { QueryParseError } from './query/query.errors'
+export { syncRepo, syncRepos } from './sync/sync-repo'
+export type { SyncError, SyncEvent, SyncOptions, SyncOutcome, SyncStatus, SyncTarget } from './sync/sync.types'
+export { targetFromUrl } from './sync/target-from-url'
 export type {
   AndNode,
   FilterKey,
