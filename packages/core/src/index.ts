@@ -5,6 +5,26 @@
  * @module
  */
 
+export { GitError } from './git/git.errors'
+export { compileQuery } from './plan/compile-query'
+export { grepArgs } from './plan/grep-args'
+export { listMatchingFiles, narrowingPathspecs } from './plan/list-matching-files'
+export type { ListMatchingFilesOptions } from './plan/list-matching-files'
+export { QueryCompileError } from './plan/plan.errors'
+export type {
+  AllLeaf,
+  Expr,
+  FileExpr,
+  FileLeaf,
+  FilterLeaf,
+  GrepLeaf,
+  LanguageLeaf,
+  NoneLeaf,
+  PathLeaf,
+  QueryExpr,
+  SearchPlan,
+} from './plan/plan.types'
+export { specializePlan } from './plan/specialize-plan'
 export { parseQuery } from './query/parse-query'
 export { QueryParseError } from './query/query.errors'
 export type {

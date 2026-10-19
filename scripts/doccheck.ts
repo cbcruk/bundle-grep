@@ -85,6 +85,7 @@ try {
         strict: true,
         skipLibCheck: true,
         noEmit: true,
+        resolveJsonModule: true,
         paths: { '@bundle-grep/core': [join(ROOT, 'packages/core/src/index.ts')] },
       },
       files,

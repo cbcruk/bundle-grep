@@ -116,6 +116,26 @@ function scanPattern(query: string, start: number): ScanResult<Pattern> {
   return Result.ok({ value: { kind: 'literal', value, quoted: false }, end })
 }
 
+/**
+ * Reads a `path:` value, where a leading `/` is either a regex or GitHub's
+ * start-of-path anchor.
+ *
+ * It is a regex only when a closing `/` ends the term; `/src/**\/*.js` and
+ * `/src` are anchored paths and stay literal.
+ */
+function scanPathPattern(query: string, start: number): ScanResult<Pattern> {
+  if (query[start] === '/') {
+    const regex = scanRegex(query, start)
+    const next = regex.isOk() ? query[regex.value.end] : undefined
+    if (regex.isOk() && (next === undefined || isSpace(next) || next === ')')) {
+      return Result.ok({ value: { kind: 'regex', source: regex.value.value }, end: regex.value.end })
+    }
+    const { value, end } = scanWord(query, start)
+    return Result.ok({ value: { kind: 'literal', value, quoted: false }, end })
+  }
+  return scanPattern(query, start)
+}
+
 /** Reads a known qualifier whose key starts at `keyStart` and whose value starts at `valueStart`. */
 function scanQualifier(
   query: string,
@@ -128,11 +148,11 @@ function scanQualifier(
     return fail(`Qualifier ${key}: needs a value`, keyStart, valueStart)
   }
 
-  const scanned = scanPattern(query, valueStart)
+  const field = MATCH_KEYS[key]
+  const scanned = field === 'path' ? scanPathPattern(query, valueStart) : scanPattern(query, valueStart)
   if (scanned.isErr()) return Result.err(scanned.error)
   const { value: pattern, end } = scanned.value
 
-  const field = MATCH_KEYS[key]
   if (field) {
     return Result.ok({ value: { type: 'match', field, pattern, span: span(keyStart, end) }, end })
   }
