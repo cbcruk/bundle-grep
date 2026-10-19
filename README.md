@@ -14,16 +14,17 @@ Requires [Bun](https://bun.com), git, and, for GitHub sources, a logged-in
 ```sh
 bundle-grep sync cbcruk                  # every repository of a user or organisation
 bundle-grep sync cbcruk/barlo            # one GitHub repository
-bundle-grep sync git@example.com:a/b.git # any git URL or local path
-bundle-grep search 'useState language:typescript -is:fork'
+bundle-grep sync git@example.com:a/b.git # any git URL, or a local path such as ./repo
+bundle-grep search useState language:typescript -is:fork
 bundle-grep list
 bundle-grep restore                      # rebuild search caches from the bundles
 ```
 
-Everything lives under `~/.bundle-grep`, or `$BUNDLE_GREP_ROOT`, or `--root`:
-bundles and metadata in `archive/`, and search caches, which `restore` can
-always rebuild, in `cache/`. `search` exits 0 when something matched, 1 when
-nothing did, and 2 on an error; `--json` prints one JSON object per event.
+Everything lives under `--root`, else `$BUNDLE_GREP_ROOT`, else
+`~/.bundle-grep`: bundles and metadata in `archive/`, and search caches, which
+`restore` can always rebuild, in `cache/`. `search` exits 0 when something
+matched, 1 when nothing did, and 2 on an error. With `--json`, `list` prints a
+JSON array and the other commands one JSON object per line.
 
 ## Development
 

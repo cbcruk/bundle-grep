@@ -24,14 +24,52 @@ export type ParsedArgs<O extends Options> = ReturnType<
 >
 
 /**
+ * Moves arguments that start with a single `-` but name no known short
+ * option behind a `--`, so they reach the command as positionals.
+ */
+function looseArgs(args: readonly string[], options: Options): string[] {
+  const takesValue = (name: string | undefined): boolean =>
+    Object.entries(options).some(([long, option]) => (long === name || option.short === name) && option.type === 'string')
+  const flags: string[] = []
+  const positionals: string[] = []
+  for (let i = 0; i < args.length; i++) {
+    const arg = args[i]!
+    if (arg === '--') {
+      positionals.push(...args.slice(i + 1))
+      break
+    }
+    const long = arg.startsWith('--') ? arg.slice(2) : undefined
+    const short = !long && arg.length > 1 && arg.startsWith('-') ? arg[1] : undefined
+    if (long !== undefined) {
+      flags.push(arg)
+      if (!long.includes('=') && takesValue(long) && i + 1 < args.length) flags.push(args[++i]!)
+    } else if (short !== undefined && Object.values(options).some(option => option.short === short)) {
+      flags.push(arg)
+      if (arg.length === 2 && takesValue(short) && i + 1 < args.length) flags.push(args[++i]!)
+    } else {
+      positionals.push(arg)
+    }
+  }
+  return [...flags, '--', ...positionals]
+}
+
+/**
  * Parses a command's arguments, accepting {@linkcode COMMON_OPTIONS} besides its own.
  *
+ * @param loose Treat a single-dash word that names no short option, such as
+ * a search's `-is:fork`, as a positional instead of an unknown option.
+ * Unknown `--` options are still errors.
  * @returns The values and positionals, or a {@linkcode UsageError} for an
  * unknown option or a missing option value.
  */
-export function parseCommandArgs<O extends Options>(args: string[], options: O): Result<ParsedArgs<O>, UsageError> {
+export function parseCommandArgs<O extends Options>(
+  args: string[],
+  options: O,
+  loose = false,
+): Result<ParsedArgs<O>, UsageError> {
+  const all = { ...options, ...COMMON_OPTIONS }
   return Result.try({
-    try: () => parseArgs({ args, options: { ...options, ...COMMON_OPTIONS }, allowPositionals: true, strict: true }),
+    try: () => parseArgs({ args: loose ? looseArgs(args, all) : args, options: all, allowPositionals: true, strict: true }),
     catch: cause => new UsageError({ message: cause instanceof Error ? cause.message : String(cause) }),
   })
 }

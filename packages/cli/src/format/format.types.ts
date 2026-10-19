@@ -4,6 +4,14 @@
  * @module
  */
 
+import type { SearchEvent } from '@bundle-grep/core'
+
+/** A `file` event from {@linkcode search}. */
+export type FileEvent = Extract<SearchEvent, { type: 'file' }>
+
+/** The `done` event from {@linkcode search}. */
+export type DoneEvent = Extract<SearchEvent, { type: 'done' }>
+
 /** Turns text into styled text. */
 export type Style = (text: string) => string
 

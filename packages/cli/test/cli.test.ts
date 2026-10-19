@@ -1,6 +1,6 @@
 import { afterAll, beforeAll, describe, expect, test } from 'bun:test'
-import { chmodSync, rmSync, writeFileSync } from 'node:fs'
-import { join } from 'node:path'
+import { chmodSync, mkdirSync, readFileSync, rmSync, symlinkSync, writeFileSync } from 'node:fs'
+import { dirname, join } from 'node:path'
 
 import { createFixtureRepo, isolateGitConfig, type FixtureRepo } from '../../core/test/fixture'
 import type { Io } from '../src/cli.types'
@@ -34,6 +34,10 @@ function ghRepo(owner: string, name: string, extra: Record<string, unknown> = {}
 }
 
 async function cli(...argv: string[]): Promise<Ran> {
+  return cliWith({}, ...argv)
+}
+
+async function cliWith(extra: Partial<Io>, ...argv: string[]): Promise<Ran> {
   let stdout = ''
   let stderr = ''
   const io: Io = {
@@ -41,8 +45,10 @@ async function cli(...argv: string[]): Promise<Ran> {
     error: text => void (stderr += text),
     env: { BUNDLE_GREP_ROOT: root },
     color: false,
+    errorColor: false,
     interactive: false,
     gh,
+    ...extra,
   }
   const code = await run(argv, io)
   return { code, stdout, stderr }
@@ -172,6 +178,7 @@ describe('bundle-grep', () => {
     expect(before.code).toBe(1)
     expect(before.stderr).toStartWith('warning: 2 repositories have no search cache; run `bundle-grep restore` to search them\n')
     expect((await cli('list', '--json')).stdout).toContain('"state": "unrestored"')
+    expect((await cli('list')).stdout).toMatch(/acme\/app\s+unrestored  TypeScript  synced/)
 
     expect(await cli('restore', 'ACME', 'nobody')).toEqual({
       code: 1,
@@ -182,12 +189,54 @@ describe('bundle-grep', () => {
     expect((await cli('search', 'useState org:acme')).code).toBe(0)
   })
 
+  test('sync resolves relative paths against the working directory', async () => {
+    const cwd = process.cwd()
+    process.chdir(fixture.root)
+    const synced = await cli('sync', './repo').finally(() => process.chdir(cwd))
+    expect(synced).toEqual({ code: 0, stdout: `unchanged ${fixture.root.split('/').at(-1)}/repo\n`, stderr: '' })
+  })
+
+  test('sync looks GitHub URLs up with gh, keeping the URL, and falls back without gh', async () => {
+    const viewed = await cli('sync', 'https://github.com/other/tool')
+    expect(viewed).toEqual({ code: 1, stdout: '', stderr: expect.stringContaining('failed    Other/tool:') })
+
+    const offline = await cliWith({ gh: join(fixture.root, 'no-such-gh') }, 'sync', 'https://github.com/acme/app/tree/main')
+    expect(offline.stderr).toStartWith('warning: could not look acme/app up with gh, so whether it is a fork or archived is unknown')
+    expect(offline.stderr).toContain('failed    acme/app:')
+  })
+
+  test('sync keeps the first source for a repository named twice', async () => {
+    const alias = join(fixture.root, 'mirror', 'acme', 'app')
+    mkdirSync(dirname(alias), { recursive: true })
+    symlinkSync(fixture.repo, alias)
+
+    const synced = await cli('sync', '--json', alias, 'acme')
+    expect(synced.stdout.trimEnd().split('\n').map(line => JSON.parse(line).repo)).toEqual(['acme/app', 'acme/fork'])
+    expect(JSON.parse(readFileSync(join(root, 'archive', 'acme', 'app.json'), 'utf8')).url).toBe(alias)
+    await cli('sync', 'acme')
+  })
+
+  test('search takes negated words without quoting or --', async () => {
+    const found = await cli('search', '-is:fork', '-is:archived', 'useState', 'org:acme', '-C', '0')
+    expect(found.code).toBe(0)
+    expect(found.stdout).toStartWith('acme/app\n')
+    expect((await cli('search', '--nope', 'x')).code).toBe(2)
+    expect((await cli('search', '--', '--x')).stderr).toBe('0 files in 0 repositories\n')
+  })
+
+  test('an aborted command exits 2', async () => {
+    const controller = new AbortController()
+    controller.abort()
+    expect((await cliWith({ signal: controller.signal }, 'search', 'useState')).code).toBe(2)
+  })
+
   test('search says when nothing is archived', async () => {
     const empty = await run(['search', 'x'], {
       write: () => undefined,
       error: () => undefined,
       env: { BUNDLE_GREP_ROOT: join(fixture.root, 'nowhere') },
       color: false,
+      errorColor: false,
       interactive: false,
     })
     expect(empty).toBe(2)
