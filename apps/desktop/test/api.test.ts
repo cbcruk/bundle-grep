@@ -1,0 +1,209 @@
+import { afterAll, beforeAll, describe, expect, test } from 'bun:test'
+import { join } from 'node:path'
+
+import { syncRepos, type ArchiveLayout } from '@bundle-grep/core'
+
+import { createFixtureRepo, isolateGitConfig, type FixtureRepo } from '../../../packages/core/test/fixture'
+import { createApi } from '../src/api/create-api'
+import { TOKEN_HEADER } from '../src/api/guard'
+
+isolateGitConfig()
+
+const HOST = '127.0.0.1:4100'
+const TOKEN = 'secret-token'
+
+let fixture: FixtureRepo
+let layout: ArchiveLayout
+
+beforeAll(async () => {
+  fixture = createFixtureRepo([
+    {
+      message: 'init',
+      files: {
+        'src/counter.ts': 'import { useState } from "react"\n\nexport const n = useState(0)\n',
+        'README.md': '# Counter\n',
+        'site/page.html': '<script>alert(1)</script>\n',
+      },
+    },
+  ])
+  layout = { archiveDir: join(fixture.root, 'archive'), cacheDir: join(fixture.root, 'cache') }
+  for await (const event of syncRepos([{ owner: 'me', name: 'app', url: fixture.repo }], layout)) {
+    if (event.type === 'failed') throw new Error(event.error.message)
+  }
+})
+
+afterAll(() => fixture[Symbol.dispose]())
+
+function call(path: string, init: RequestInit & { headers?: Record<string, string> } = {}): Promise<Response | undefined> {
+  const api = createApi({ layout, host: HOST, token: TOKEN })
+  const headers = { host: HOST, [TOKEN_HEADER]: TOKEN, ...init.headers }
+  return Promise.resolve(api(new Request(`http://${HOST}${path}`, { ...init, headers })))
+}
+
+async function errorOf(response: Response | undefined): Promise<{ status: number; _tag: string; span?: unknown }> {
+  if (!response) throw new Error('expected a response')
+  const { error } = (await response.json()) as { error: { _tag: string; span?: unknown } }
+  return { status: response.status, _tag: error._tag, ...(error.span ? { span: error.span } : {}) }
+}
+
+async function lines(response: Response | undefined): Promise<Record<string, unknown>[]> {
+  if (!response?.ok) throw new Error(`expected a stream, got ${response?.status}`)
+  return (await response.text())
+    .split('\n')
+    .filter(Boolean)
+    .map(line => JSON.parse(line) as Record<string, unknown>)
+}
+
+describe('dispatch and guard', () => {
+  test('paths outside /api/ fall through to the UI', async () => {
+    expect(await call('/index.html')).toBeUndefined()
+    expect(await call('/apix')).toBeUndefined()
+  })
+
+  test('another Host header is refused, as a DNS-rebound page sends', async () => {
+    expect(await errorOf(await call('/api/search?q=x', { headers: { host: 'evil.example:4100' } }))).toMatchObject({ status: 403 })
+    expect(await errorOf(await call('/api/search?q=x', { headers: { host: '127.0.0.1:4101' } }))).toMatchObject({ status: 403 })
+    expect(await errorOf(await call('/api/search?q=x', { headers: { host: 'localhost:4100' } }))).toMatchObject({ status: 403 })
+  })
+
+  test('a missing or wrong token is refused', async () => {
+    expect(await errorOf(await call('/api/search?q=x', { headers: { [TOKEN_HEADER]: '' } }))).toMatchObject({ status: 403 })
+    expect(await errorOf(await call('/api/search?q=x', { headers: { [TOKEN_HEADER]: 'secret-tokem' } }))).toMatchObject({ status: 403 })
+    expect(await errorOf(await call('/api/search?q=x', { headers: { [TOKEN_HEADER]: 'x' } }))).toMatchObject({ status: 403 })
+  })
+
+  test('the guard runs before an unknown path is reported', async () => {
+    expect(await errorOf(await call('/api/nope', { headers: { [TOKEN_HEADER]: '' } }))).toMatchObject({ status: 403 })
+    expect(await errorOf(await call('/api/nope'))).toEqual({ status: 404, _tag: 'NotFoundError' })
+  })
+
+  test('nothing but GET and HEAD is served', async () => {
+    expect(await errorOf(await call('/api/search?q=x', { method: 'POST', body: '{}' }))).toMatchObject({ status: 405 })
+    expect(await errorOf(await call('/api/search?q=x', { method: 'DELETE' }))).toMatchObject({ status: 405 })
+  })
+})
+
+describe('/api/search', () => {
+  test('streams the archive summary, files, and done as NDJSON', async () => {
+    const response = await call('/api/search?q=useState')
+    expect(response?.headers.get('content-type')).toBe('application/x-ndjson; charset=utf-8')
+    const events = await lines(response)
+    expect(events[0]).toEqual({ type: 'archive', repos: 1, unrestored: [], invalid: [] })
+    expect(events[1]).toMatchObject({
+      type: 'file',
+      repo: 'me/app',
+      path: 'src/counter.ts',
+      lines: [{ number: 1, text: 'import { useState } from "react"' }, { number: 3 }],
+    })
+    expect(events.at(-1)).toMatchObject({ type: 'done', totalFiles: 1, truncated: false })
+  })
+
+  test('limit and context are passed on', async () => {
+    const limited = await lines(await call('/api/search?q=e&limit=1'))
+    expect(limited.filter(event => event.type === 'file')).toHaveLength(1)
+    expect(limited.at(-1)).toMatchObject({ truncated: true })
+
+    const context = await lines(await call('/api/search?q=content:useState&context=1'))
+    expect(context[1]).toMatchObject({ lines: [{ number: 1 }, { number: 2, context: true }, { number: 3 }] })
+  })
+
+  test('bad parameters are a 400', async () => {
+    expect(await errorOf(await call('/api/search'))).toEqual({ status: 400, _tag: 'UsageError' })
+    expect(await errorOf(await call('/api/search?q=%20'))).toEqual({ status: 400, _tag: 'UsageError' })
+    expect(await errorOf(await call('/api/search?q=x&limit=-1'))).toEqual({ status: 400, _tag: 'UsageError' })
+    expect(await errorOf(await call('/api/search?q=x&context=ten'))).toEqual({ status: 400, _tag: 'UsageError' })
+  })
+
+  test('query errors carry their span', async () => {
+    expect(await errorOf(await call(`/api/search?q=${encodeURIComponent('a (b')}`))).toEqual({
+      status: 400,
+      _tag: 'QueryParseError',
+      span: { offset: 2, length: 1 },
+    })
+    expect(await errorOf(await call(`/api/search?q=${encodeURIComponent('x language:nope')}`))).toMatchObject({
+      status: 400,
+      _tag: 'QueryCompileError',
+    })
+    expect(await errorOf(await call(`/api/search?q=${encodeURIComponent('x /[a/')}`))).toEqual({
+      status: 400,
+      _tag: 'QueryCompileError',
+      span: { offset: 2, length: 4 },
+    })
+  })
+
+  test('cancelling the body ends the search', async () => {
+    const response = await call('/api/search?q=useState')
+    const reader = response!.body!.getReader()
+    expect((await reader.read()).done).toBe(false)
+    await reader.cancel()
+  })
+
+  test('a client that disconnects aborts the request signal, which stops the search', async () => {
+    let seen: Request | undefined
+    using server = Bun.serve({
+      port: 0,
+      hostname: '127.0.0.1',
+      fetch: async request => {
+        seen = request
+        const api = createApi({ layout, host: `127.0.0.1:${server.port}`, token: TOKEN })
+        return (await api(request)) ?? new Response('Not found', { status: 404 })
+      },
+    })
+    const client = new AbortController()
+    const response = await fetch(`http://127.0.0.1:${server.port}/api/search?q=useState`, {
+      headers: { [TOKEN_HEADER]: TOKEN },
+      signal: client.signal,
+    })
+    expect(response.status).toBe(200)
+    await response.body!.getReader().read()
+    client.abort()
+
+    const aborted = await Promise.race([
+      new Promise<boolean>(resolve => {
+        if (seen?.signal.aborted) resolve(true)
+        seen?.signal.addEventListener('abort', () => resolve(true), { once: true })
+      }),
+      Bun.sleep(3000).then(() => false),
+    ])
+    expect(aborted).toBe(true)
+  })
+})
+
+describe('/api/blob', () => {
+  test('serves a file as inert bytes', async () => {
+    const response = await call('/api/blob/me/app/HEAD/site/page.html')
+    expect(response?.status).toBe(200)
+    expect(await response?.text()).toBe('<script>alert(1)</script>\n')
+    expect(Object.fromEntries(response!.headers)).toMatchObject({
+      'content-type': 'application/octet-stream',
+      'content-security-policy': 'sandbox',
+      'x-content-type-options': 'nosniff',
+    })
+  })
+
+  test('percent-encoded segments are decoded', async () => {
+    expect(await (await call('/api/blob/me/app/HEAD/src%2Fcounter.ts'))?.text()).toStartWith('import')
+  })
+
+  test('a missing file, a directory, an unknown ref, or an unknown repository is a 404', async () => {
+    expect(await errorOf(await call('/api/blob/me/app/HEAD/nope.txt'))).toEqual({ status: 404, _tag: 'BlobNotFoundError' })
+    expect(await errorOf(await call('/api/blob/me/app/HEAD/src'))).toEqual({ status: 404, _tag: 'BlobNotFoundError' })
+    expect(await errorOf(await call('/api/blob/me/app/nope/README.md'))).toEqual({ status: 404, _tag: 'GitError' })
+    expect(await errorOf(await call('/api/blob/me/other/HEAD/README.md'))).toEqual({ status: 404, _tag: 'NotFoundError' })
+  })
+
+  test('malformed requests are a 400', async () => {
+    for (const path of [
+      '/api/blob/me/app/HEAD',
+      '/api/blob/me/app/HEAD/',
+      '/api/blob/me/app/-p/README.md',
+      '/api/blob/me/app/HEAD~1/README.md',
+      '/api/blob/me/app/HEAD:src/counter.ts',
+      '/api/blob/me/app/HEAD/src%2F..%2FREADME.md',
+      '/api/blob/me/app/HEAD/%ZZ',
+      '/api/blob/me%2Fx/app/HEAD/README.md',
+    ]) {
+      expect({ path, ...(await errorOf(await call(path))) }).toMatchObject({ path, status: 400 })
+    }
+  })
+})

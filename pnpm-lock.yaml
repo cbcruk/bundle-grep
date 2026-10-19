@@ -18,11 +18,26 @@ importers:
         specifier: ^7.0.2
         version: 7.0.2
 
+  apps/desktop:
+    dependencies:
+      '@bundle-grep/core':
+        specifier: workspace:*
+        version: link:../../packages/core
+      barlo:
+        specifier: ^0.1.3
+        version: 0.1.3
+      better-result:
+        specifier: ^3.0.1
+        version: 3.0.1
+
   packages/cli:
     dependencies:
       '@bundle-grep/core':
         specifier: workspace:*
         version: link:../core
+      '@bundle-grep/desktop':
+        specifier: workspace:*
+        version: link:../../apps/desktop
       better-result:
         specifier: ^3.0.1
         version: 3.0.1
@@ -283,6 +298,10 @@ packages:
     cpu: [x64]
     os: [win32]
 
+  barlo@0.1.3:
+    resolution: {integrity: sha512-hjoDTxE7mRFVdO/BEcTm0NtzFFX0xdqYv+FWwUci4svgSAnREm/Cb07BFjXuVq8QrBi3xFgKXl6p7YJcOD4VMw==}
+    engines: {bun: '>=1.3.12'}
+
   better-result@3.0.1:
     resolution: {integrity: sha512-rnCeqEXkKPHmz5MO5ZroPRDyHe4YvlNPyy7qj8cVcWs/GnvSvC3086G74/220W+wWcIWlXgzvcjskFV0A4blUQ==}
 
@@ -439,6 +458,10 @@ snapshots:
 
   '@typescript/typescript-win32-x64@7.0.2':
     optional: true
+
+  barlo@0.1.3:
+    dependencies:
+      better-result: 3.0.1
 
   better-result@3.0.1: {}
 

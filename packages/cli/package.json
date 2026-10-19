@@ -8,6 +8,7 @@
   },
   "dependencies": {
     "@bundle-grep/core": "workspace:*",
+    "@bundle-grep/desktop": "workspace:*",
     "better-result": "^3.0.1"
   }
 }

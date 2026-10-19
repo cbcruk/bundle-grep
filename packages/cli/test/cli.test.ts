@@ -166,6 +166,16 @@ describe('bundle-grep', () => {
     })
   })
 
+  test('ui checks its arguments before opening a window', async () => {
+    const help = await cli('ui', '--help')
+    expect(help.code).toBe(0)
+    expect(help.stdout).toStartWith('Usage: bundle-grep ui')
+    expect((await cli('ui', 'extra')).code).toBe(2)
+    const bad = await cli('ui', '--dev-server', 'localhost')
+    expect(bad.code).toBe(2)
+    expect(bad.stderr).toStartWith('--dev-server must be a URL, not "localhost"')
+  })
+
   test('search rejects bad numbers and missing queries', async () => {
     const bad = await cli('search', '--limit', 'ten', 'x')
     expect(bad.code).toBe(2)

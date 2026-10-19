@@ -18,6 +18,7 @@ bundle-grep sync git@example.com:a/b.git # any git URL, or a local path such as 
 bundle-grep search useState language:typescript -is:fork
 bundle-grep list
 bundle-grep restore                      # rebuild search caches from the bundles
+bundle-grep ui                           # open the search window (needs a local Chrome)
 ```
 
 Everything lives under `--root`, else `$BUNDLE_GREP_ROOT`, else
@@ -59,3 +60,4 @@ pnpm test
 | --- | --- |
 | `packages/core` | Sync and restore bundles, parse and compile queries, run searches |
 | `packages/cli` | The `bundle-grep` command |
+| `apps/desktop` | The search window: a [barlo](https://github.com/cbcruk/barlo) app over a local-only server |
