@@ -11,7 +11,13 @@ import type { QueryNode, Span } from './query.types'
 import type { Keyword, KeywordToken, Token } from './token.types'
 import { tokenize } from './tokenize'
 
-type Parsed = Result<QueryNode, QueryParseError>
+/** A parsed operand and the part of the query it came from, including any parentheses around it. */
+interface Operand {
+  node: QueryNode
+  span: Span
+}
+
+type Parsed = Result<Operand, QueryParseError>
 
 /** Deepest nesting of parentheses and `NOT`s accepted, well short of the call stack's limit. */
 const MAX_NESTING = 256
@@ -24,10 +30,21 @@ function after(span: Span): Span {
   return { offset: span.offset + span.length, length: 0 }
 }
 
+function cover(first: Span, last: Span): Span {
+  return { offset: first.offset, length: last.offset + last.length - first.offset }
+}
+
 /** Joins operands, splicing in same-typed children so `a b AND c` is one flat node. */
-function combine(type: 'and' | 'or', nodes: QueryNode[]): QueryNode {
-  if (nodes.length === 1) return nodes[0]!
-  return { type, children: nodes.flatMap(node => (node.type === type ? node.children : [node])) }
+function combine(type: 'and' | 'or', operands: Operand[]): Operand {
+  if (operands.length === 1) return operands[0]!
+  const span = cover(operands[0]!.span, operands.at(-1)!.span)
+  const children = operands.flatMap(({ node }) => (node.type === type ? node.children : [node]))
+  return { node: { type, children, span }, span }
+}
+
+function negate(start: Span, child: Operand): Operand {
+  const span = cover(start, child.span)
+  return { node: { type: 'not', child: child.node, span }, span }
 }
 
 /**
@@ -126,15 +143,17 @@ class Parser {
     this.#position++
 
     switch (token.kind) {
-      case 'operand':
-        return Result.ok(token.negated ? { type: 'not', child: token.node } : token.node)
+      case 'operand': {
+        const operand = { node: token.node, span: token.node.span }
+        return Result.ok(token.negated ? negate(token.span, operand) : operand)
+      }
 
       case 'keyword': {
         if (token.keyword !== 'NOT') return fail(`Expected a search term before ${token.keyword}`, token.span)
         this.#nesting++
         const child = this.#parseAfter(token)
         this.#nesting--
-        return child.map(child => ({ type: 'not', child }))
+        return child.map(child => negate(token.span, child))
       }
 
       case 'rparen':
@@ -151,9 +170,10 @@ class Parser {
         this.#nesting--
         if (inner.isErr()) return inner
 
-        if (this.#peek()?.kind !== 'rparen') return fail('Missing closing parenthesis', token.span)
+        const closing = this.#peek()
+        if (closing?.kind !== 'rparen') return fail('Missing closing parenthesis', token.span)
         this.#position++
-        return inner
+        return inner.map(({ node }) => ({ node, span: cover(token.span, closing.span) }))
       }
     }
   }
@@ -166,7 +186,8 @@ class Parser {
  * qualifiers `content:`, `path:`, `repo:`, `org:`, `user:`, `language:` and
  * `is:`, a `-` prefix to negate a qualifier, `AND`, `OR`, `NOT`, and
  * parentheses. A `key:value` with any other key is a plain search term, as on
- * GitHub.
+ * GitHub. `\"` and `\\` escape a quote or a backslash, inside a phrase or
+ * out of one.
  *
  * See {@link https://docs.github.com/en/search-github/github-code-search/understanding-github-code-search-syntax}.
  *
@@ -187,5 +208,5 @@ class Parser {
  * ```
  */
 export function parseQuery(query: string): Result<QueryNode, QueryParseError> {
-  return tokenize(query).andThen(tokens => new Parser(tokens, query.length).parse())
+  return tokenize(query).andThen(tokens => new Parser(tokens, query.length).parse()).map(({ node }) => node)
 }

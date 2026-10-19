@@ -32,8 +32,10 @@ export type {
   PathLeaf,
   QueryExpr,
   SearchPlan,
+  ValidateRegexesOptions,
 } from './plan/plan.types'
 export { specializePlan } from './plan/specialize-plan'
+export { validateRegexes } from './plan/validate-regexes'
 export { parseQuery } from './query/parse-query'
 export { PcreUnavailableError } from './search/search.errors'
 export { search, toSearchRepoError } from './search/search'

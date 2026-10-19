@@ -7,6 +7,7 @@
 import { Result } from 'better-result'
 
 import type { GitError } from '../git/git.errors'
+import { hasCommit } from '../git/has-commit'
 import { runGit } from '../git/run-git'
 import { grepArgs } from '../plan/grep-args'
 import { languageOf } from '../plan/languages'
@@ -133,7 +134,9 @@ function count(record: Record<string, number>, key: string): void {
  * repository's matching files arrive in path order; repositories arrive as
  * they finish. A repository that fails yields a `repo-error`, counts towards
  * nothing, and the rest carry on; its share of the limit is not handed to
- * repositories that already finished. The last event is `done`, carrying the
+ * repositories that already finished. A repository with no commits yet has
+ * nothing to search, so it matches nothing rather than failing — unless
+ * {@linkcode SearchRepo.ref} names a tree to search. The last event is `done`, carrying the
  * total and facets over every matching file even when `file` events stopped at
  * the limit. A `holds` callback that throws rejects the search instead.
  *
@@ -190,6 +193,8 @@ export async function* search<Repo extends SearchRepo>(
     const files = await listMatchingFiles({ gitDir: repo.gitDir, expr, ref, signal: stop })
     if (stop.aborted) return
     if (files.isErr()) {
+      const empty = repo.ref === undefined && (await hasCommit(repo.gitDir, stop)).map(has => !has).unwrapOr(false)
+      if (stop.aborted || empty) return
       push({ type: 'repo-error', repo: repo.name, error: toSearchRepoError(files.error) })
       return
     }

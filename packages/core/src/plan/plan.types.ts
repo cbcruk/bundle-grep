@@ -130,3 +130,9 @@ export interface ListMatchingFilesOptions {
   /** Stops the search, killing any git still running. */
   signal?: AbortSignal
 }
+
+/** Options for {@linkcode validateRegexes}. */
+export interface ValidateRegexesOptions {
+  /** Kills any git still running; the check then fails with a `GitError`. */
+  signal?: AbortSignal
+}

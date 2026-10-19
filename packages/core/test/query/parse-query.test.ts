@@ -204,6 +204,65 @@ describe('spans', () => {
   test('a negated qualifier covers the key and value, not the dash', () => {
     expect(parseQuery('-path:vendor').unwrap()).toMatchObject({ child: { span: { offset: 1, length: 11 } } })
   })
+
+  test('the not of a negated qualifier covers the dash', () => {
+    expect(parseQuery('-path:vendor').unwrap()).toMatchObject({ type: 'not', span: { offset: 0, length: 12 } })
+  })
+
+  test('and and or run from the first operand to the last', () => {
+    expect(parseQuery(' a b OR c ').unwrap()).toMatchObject({
+      type: 'or',
+      span: { offset: 1, length: 8 },
+      children: [{ type: 'and', span: { offset: 1, length: 3 } }, { span: { offset: 8, length: 1 } }],
+    })
+  })
+
+  test('parentheses widen the operand they wrap', () => {
+    expect(parseQuery('(a b) OR c').unwrap()).toMatchObject({
+      span: { offset: 0, length: 10 },
+      children: [{ type: 'and', span: { offset: 1, length: 3 } }, {}],
+    })
+    expect(parseQuery('x ((a OR b))').unwrap()).toMatchObject({
+      type: 'and',
+      span: { offset: 0, length: 12 },
+      children: [{}, { type: 'or', span: { offset: 4, length: 6 } }],
+    })
+  })
+
+  test('NOT covers the keyword through its operand', () => {
+    expect(parseQuery('x NOT (a b)').unwrap()).toMatchObject({
+      children: [{}, { type: 'not', span: { offset: 2, length: 9 }, child: { span: { offset: 7, length: 3 } } }],
+    })
+  })
+
+  test('a flattened and covers every operand', () => {
+    expect(parseQuery('(a b) c').unwrap()).toMatchObject({ type: 'and', span: { offset: 0, length: 7 } })
+  })
+})
+
+describe('escapes outside quotes', () => {
+  test('a backslash escapes a quote or a backslash', () => {
+    expect(tree('say\\"hi\\"')).toEqual(term('say"hi"'))
+    expect(tree('C:\\\\Windows')).toEqual(term('C:\\Windows'))
+  })
+
+  test('an escaped quote does not start a phrase', () => {
+    expect(tree('\\"a b')).toEqual({ and: [term('"a'), term('b')] })
+  })
+
+  test('other backslashes are kept', () => {
+    expect(tree('a\\nb \\')).toEqual({ and: [term('a\\nb'), term('\\')] })
+  })
+
+  test('qualifier values unescape too', () => {
+    expect(tree('repo:a\\"b path:x\\\\y')).toEqual({
+      and: [{ filter: 'repo', value: 'a"b' }, pathLiteral('x\\y')],
+    })
+  })
+
+  test('the span still covers the escapes', () => {
+    expect(parseQuery('a\\"b').unwrap()).toMatchObject({ span: { offset: 0, length: 4 } })
+  })
 })
 
 describe('errors', () => {
