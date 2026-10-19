@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 
 import { navigate } from '../../hooks/use-route'
-import { isPageKey } from '../../lib/keyboard'
+import { isPageKey, isTyping } from '../../lib/keyboard'
 import { groupByRepo } from '../../lib/group'
 import { toggleFacet } from '../../lib/query-edit'
 import { FileResult } from '../file-result/file-result'
@@ -16,6 +16,8 @@ import './results.css'
  * matching files grouped by repository.
  *
  * `j`/`k` or the arrow keys move between files, and `Enter` or `o` opens one.
+ * Moving also works while a button such as "Show more" keeps focus after a
+ * click; opening does not, so `Enter` still presses the button.
  */
 export function Results({ query, search, limit, maxLimit, onShowMore }: ResultsProps): React.JSX.Element {
   const [selected, setSelected] = useState(-1)
@@ -28,14 +30,15 @@ export function Results({ query, search, limit, maxLimit, onShowMore }: ResultsP
 
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent): void => {
-      if (!isPageKey(event) || ordered.length === 0) return
+      const onButton = !isTyping(event) && (event.target as HTMLElement | null)?.tagName === 'BUTTON'
+      if ((!isPageKey(event) && !onButton) || ordered.length === 0) return
       if (event.key === 'j' || event.key === 'ArrowDown') {
         event.preventDefault()
         setSelected(index => Math.min(index + 1, ordered.length - 1))
       } else if (event.key === 'k' || event.key === 'ArrowUp') {
         event.preventDefault()
         setSelected(index => Math.max(index - 1, 0))
-      } else if ((event.key === 'Enter' || event.key === 'o') && selected >= 0) {
+      } else if ((event.key === 'Enter' || event.key === 'o') && selected >= 0 && !onButton) {
         const file = ordered[selected]
         if (!file) return
         event.preventDefault()
