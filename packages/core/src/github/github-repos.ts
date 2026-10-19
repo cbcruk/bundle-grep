@@ -61,8 +61,10 @@ function unexpected(args: string[]): GhError {
  * Needs `gh` to be installed and logged in. Forks and archived repositories
  * are included, so that `is:fork` and `is:archived` have something to find.
  *
- * @returns The repositories, or a {@linkcode GhError} when `gh` fails or
- * prints something other than a repository list.
+ * @returns The repositories, or a {@linkcode GhError} when `gh` fails, prints
+ * something other than a repository list, or the account has more
+ * repositories than {@linkcode ListGithubReposOptions.limit}, so that none are
+ * silently left out.
  *
  * @example Syncing every repository of an account
  * ```ts
@@ -78,10 +80,16 @@ export async function listGithubRepos(
   owner: string,
   options: ListGithubReposOptions = {},
 ): Promise<Result<SyncTarget[], GhError>> {
-  const args = ['repo', 'list', '--json', FIELDS, '--limit', String(options.limit ?? 1000), '--', owner]
+  const limit = options.limit ?? 1000
+  const args = ['repo', 'list', '--json', FIELDS, '--limit', String(limit + 1), '--', owner]
   const json = await runGhJson(args, options)
   return json.andThen(value => {
     if (!Array.isArray(value)) return Result.err(unexpected(args))
+    if (value.length > limit) {
+      return Result.err(
+        new GhError({ args, stderr: '', message: `${owner} has more than ${limit} repositories; raise the limit` }),
+      )
+    }
     const targets = value.map(toTarget)
     return targets.every(target => target !== undefined) ? Result.ok(targets) : Result.err(unexpected(args))
   })

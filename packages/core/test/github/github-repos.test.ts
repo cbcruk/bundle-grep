@@ -64,10 +64,18 @@ describe('listGithubRepos', () => {
       '--json',
       'name,owner,url,isFork,isArchived,isPrivate,primaryLanguage,description,pushedAt',
       '--limit',
-      '5',
+      '6',
       '--',
       'cbcruk',
     ])
+  })
+
+  test('fails rather than silently dropping repositories past the limit', async () => {
+    using fake = fakeGh(JSON.stringify([BARLO, BARLO, BARLO]))
+
+    const result = await listGithubRepos('cbcruk', { gh: fake.gh, limit: 2 })
+
+    expect(result.isErr() && result.error.message).toBe('cbcruk has more than 2 repositories; raise the limit')
   })
 
   test('reports gh failing with its stderr', async () => {

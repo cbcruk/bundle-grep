@@ -1,4 +1,4 @@
-import { describe, expect, test } from 'bun:test'
+import { afterAll, beforeAll, describe, expect, test } from 'bun:test'
 import { mkdirSync, readFileSync, statSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 
@@ -6,6 +6,17 @@ import { readMetadata, syncRepo, syncRepos } from '../../src'
 import type { SyncOptions, SyncTarget } from '../../src'
 import { createFixtureRepo, runGit } from '../fixture'
 import type { FixtureRepo } from '../fixture'
+
+const ISOLATED = { GIT_CONFIG_GLOBAL: '/dev/null', GIT_CONFIG_NOSYSTEM: '1' }
+const saved = Object.fromEntries(Object.keys(ISOLATED).map(key => [key, process.env[key]]))
+
+beforeAll(() => Object.assign(process.env, ISOLATED))
+afterAll(() => {
+  for (const [key, value] of Object.entries(saved)) {
+    if (value === undefined) delete process.env[key]
+    else process.env[key] = value
+  }
+})
 
 const FIRST = [{ message: 'init', files: { 'src/a.ts': 'export const a = 1\n' } }]
 
@@ -106,6 +117,76 @@ describe('syncRepo', () => {
     const restored = join(fixture.root, 'restored.git')
     runGit(fixture.root, ['clone', '--quiet', '--bare', outcome.paths.bundle, restored])
     expect(runGit(restored, ['symbolic-ref', 'HEAD'])).toBe('refs/heads/trunk')
+  })
+
+  test('rebuilds a bundle that no longer holds the refs', async () => {
+    using fixture = createFixtureRepo([...FIRST, { message: 'two', files: { 'b.ts': 'b\n' } }])
+    const { options, target } = setup(fixture)
+    const first = (await syncRepo(target, options)).unwrap()
+
+    writeFileSync(first.paths.bundle, 'garbage')
+    expect((await syncRepo(target, options)).unwrap().status).toBe('updated')
+
+    using older = createFixtureRepo(FIRST)
+    writeFileSync(first.paths.bundle, readFileSync(older.bundle))
+    expect((await syncRepo(target, options)).unwrap().status).toBe('updated')
+    expect(bundleHeads(fixture, first.paths.bundle)).toEqual(['HEAD', 'refs/heads/main'])
+    expect(runGit(fixture.root, ['bundle', 'list-heads', first.paths.bundle])).toContain(fixture.git('rev-parse', 'main'))
+  })
+
+  test('falls back to main, master, or the first branch when the remote names no HEAD', async () => {
+    using fixture = createFixtureRepo(FIRST)
+    fixture.git('branch', '--move', 'main', 'trunk')
+    fixture.git('checkout', '--quiet', '--detach')
+    const { options, target } = setup(fixture)
+
+    const outcome = (await syncRepo(target, options)).unwrap()
+
+    expect(outcome.metadata).toMatchObject({ defaultBranch: 'trunk', head: fixture.git('rev-parse', 'HEAD') })
+    expect(bundleHeads(fixture, outcome.paths.bundle)).toEqual(['HEAD', 'refs/heads/trunk'])
+  })
+
+  test('works on its own mirror even when GIT_DIR points elsewhere', async () => {
+    using fixture = createFixtureRepo(FIRST)
+    fixture.git('branch', 'mine')
+    using other = createFixtureRepo([{ message: 'other', files: { 'x.txt': 'x\n' } }])
+    const { options } = setup(fixture)
+    const before = fixture.git('for-each-ref')
+
+    process.env.GIT_DIR = join(fixture.repo, '.git')
+    const result = await syncRepo({ owner: 'acme', name: 'other', url: other.repo }, options).finally(() => {
+      delete process.env.GIT_DIR
+    })
+
+    expect(result.unwrap().metadata.head).toBe(other.git('rev-parse', 'HEAD'))
+    expect(fixture.git('for-each-ref')).toBe(before)
+  })
+
+  test('recovers from a lock left by a killed sync', async () => {
+    using fixture = createFixtureRepo(FIRST)
+    const { options, target } = setup(fixture)
+    const first = (await syncRepo(target, options)).unwrap()
+    writeFileSync(`${first.paths.bundle}.tmp.lock`, '')
+    writeFileSync(`${first.paths.bundle}.tmp`, '')
+
+    fixture.git('commit', '--quiet', '--allow-empty', '--message', 'more')
+
+    expect((await syncRepo(target, options)).unwrap().status).toBe('updated')
+  })
+
+  test('leaves a password in the URL out of the metadata', async () => {
+    using fixture = createFixtureRepo(FIRST)
+    const { options, target } = setup(fixture)
+    const url = 'https://user:secret@git.example.invalid/acme/widgets'
+    const rewrite = { GIT_CONFIG_COUNT: '1', GIT_CONFIG_KEY_0: `url.${fixture.repo}.insteadOf`, GIT_CONFIG_VALUE_0: url }
+
+    Object.assign(process.env, rewrite)
+    const outcome = await syncRepo({ ...target, url }, options).finally(() => {
+      for (const key of Object.keys(rewrite)) delete process.env[key]
+    })
+
+    expect(outcome.unwrap().metadata.url).toBe('https://git.example.invalid/acme/widgets')
+    expect(readFileSync(outcome.unwrap().paths.metadata, 'utf8')).not.toContain('secret')
   })
 
   test('rebuilds a bundle whose metadata is unreadable', async () => {

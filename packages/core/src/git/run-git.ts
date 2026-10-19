@@ -10,6 +10,17 @@ import { runProcess } from '../process/run-process'
 import { GitError } from './git.errors'
 import type { GitOutput, RunGitOptions } from './git.types'
 
+const REPOSITORY_ENV = {
+  GIT_DIR: undefined,
+  GIT_WORK_TREE: undefined,
+  GIT_COMMON_DIR: undefined,
+  GIT_INDEX_FILE: undefined,
+  GIT_OBJECT_DIRECTORY: undefined,
+  GIT_ALTERNATE_OBJECT_DIRECTORIES: undefined,
+  GIT_NAMESPACE: undefined,
+  GIT_PREFIX: undefined,
+}
+
 /**
  * Runs git with the given arguments and waits for it to exit.
  *
@@ -18,11 +29,18 @@ import type { GitOutput, RunGitOptions } from './git.types'
  * as `color.grep` still wins over it, so callers parsing output also pass
  * `--no-color`.
  *
+ * Variables that point git at another repository, such as the `GIT_DIR` a
+ * hook exports, are removed, so git always works on the repository at
+ * {@linkcode RunGitOptions.cwd}.
+ *
  * @returns The output, or a {@linkcode GitError} when git cannot start or
  * exits with a status outside `0` and `allowExitCodes`.
  */
 export async function runGit(args: readonly string[], options: RunGitOptions): Promise<Result<GitOutput, GitError>> {
-  const result = await runProcess('git', ['-c', 'color.ui=never', ...args], options)
+  const result = await runProcess('git', ['-c', 'color.ui=never', ...args], {
+    ...options,
+    env: { ...REPOSITORY_ENV, ...options.env },
+  })
   return result.mapError(
     failure =>
       new GitError({
