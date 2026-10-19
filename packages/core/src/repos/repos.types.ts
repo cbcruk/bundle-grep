@@ -27,3 +27,9 @@ export interface LoadedRepos {
   /** Repositories left out: unreadable metadata, or neither a bundle nor a cache. */
   invalid: FileSystemError[]
 }
+
+/** Which list of {@linkcode LoadedRepos} one archive entry belongs in. */
+export type Classified =
+  | { /** Ready to search. */ type: 'repos'; /** The repository. */ value: ArchivedRepo }
+  | { /** Empty or unrestored. */ type: 'empty' | 'unrestored'; /** The entry. */ value: ArchiveEntry }
+  | { /** Left out. */ type: 'invalid'; /** Why. */ value: FileSystemError }

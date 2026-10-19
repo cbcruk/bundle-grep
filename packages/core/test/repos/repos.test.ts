@@ -127,12 +127,14 @@ describe('loadArchivedRepos and search', () => {
   }
 
   test('a restored half-built cache becomes searchable', async () => {
-    const half = (await loadArchivedRepos(layout)).unwrap().unrestored.find(entry => entry.name === 'halfbuilt')!
-    expect((await restoreRepo(half, layout)).unwrap().status).toBe('updated')
-    expect((await loadArchivedRepos(layout)).unwrap().repos.map(repo => repo.name)).toContain('acme/halfbuilt')
-    rmSync(half.paths.gitDir, { recursive: true })
-    mkdirSync(half.paths.gitDir)
-    runGit(half.paths.gitDir, ['init', '--quiet', '--bare'])
+    const elsewhere = { ...layout, cacheDir: join(fixture.root, 'cache-half') }
+    const gitDir = join(elsewhere.cacheDir, 'acme', 'widgets.git')
+    mkdirSync(gitDir, { recursive: true })
+    runGit(gitDir, ['init', '--quiet', '--bare'])
+    expect((await loadArchivedRepos(elsewhere)).unwrap().unrestored.map(entry => entry.name)).toContain('widgets')
+
+    expect((await restoreRepo({ owner: 'acme', name: 'widgets' }, elsewhere)).unwrap().status).toBe('updated')
+    expect((await loadArchivedRepos(elsewhere)).unwrap().repos.map(repo => repo.name)).toEqual(['acme/widgets'])
   })
 
   test('sorts the archive into searchable, empty, unrestored and invalid', async () => {
