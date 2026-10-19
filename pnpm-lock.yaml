@@ -23,6 +23,9 @@ importers:
       '@bundle-grep/core':
         specifier: workspace:*
         version: link:../core
+      better-result:
+        specifier: ^3.0.1
+        version: 3.0.1
 
   packages/core:
     dependencies:
