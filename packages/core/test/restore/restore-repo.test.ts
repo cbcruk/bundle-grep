@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'bun:test'
-import { copyFileSync, existsSync, mkdirSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs'
+import { copyFileSync, existsSync, mkdirSync, readFileSync, rmSync, statSync, symlinkSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 
 import { compileQuery, listArchive, parseQuery, restoreRepo, restoreRepos, search, syncRepo } from '../../src'
@@ -127,17 +127,64 @@ describe('restoreRepo', () => {
     expect(result.isErr() && result.error._tag).toBe('GitError')
   })
 
-  test('reports an empty repository as empty, and a stale bundle beside it as a mismatch', async () => {
-    using fixture = createFixtureRepo([])
+  test('trusts metadata recording an empty repository over a stale bundle, removing the cache', async () => {
+    using fixture = createFixtureRepo(FIRST)
+    const layout = layoutOf(fixture)
+    const restored = { ...layout, cacheDir: join(fixture.root, 'restored') }
+    await syncRepo(targetOf(fixture), layout)
+    await restoreRepo(REPO, restored)
+
+    fixture.git('checkout', '--quiet', '--detach')
+    fixture.git('branch', '--delete', '--force', 'main')
+    expect((await syncRepo(targetOf(fixture), layout)).unwrap().status).toBe('empty')
+
+    const outcome = (await restoreRepo(REPO, restored)).unwrap()
+
+    expect(outcome).toMatchObject({ status: 'empty', head: null })
+    expect(existsSync(outcome.paths.bundle)).toBe(true)
+    expect(existsSync(outcome.paths.gitDir)).toBe(false)
+  })
+
+  test('treats a repository with only tags as empty', async () => {
+    using fixture = createFixtureRepo(FIRST)
+    fixture.git('tag', 'v1')
+    fixture.git('checkout', '--quiet', '--detach')
+    fixture.git('branch', '--delete', '--force', 'main')
+    const layout = layoutOf(fixture)
+    await syncRepo(targetOf(fixture), layout)
+    rmSync(layout.cacheDir, { recursive: true })
+
+    expect((await restoreRepo(REPO, layout)).unwrap().status).toBe('empty')
+  })
+
+  test('restores only branches and tags, so a foreign bundle leaves nothing sync would keep forever', async () => {
+    using fixture = createFixtureRepo(FIRST)
+    fixture.git('update-ref', 'refs/remotes/origin/x', 'HEAD')
+    fixture.git('notes', 'add', '--message', 'note')
+    const layout = layoutOf(fixture)
+    mkdirSync(join(layout.archiveDir, 'acme'), { recursive: true })
+    fixture.git('bundle', 'create', join(layout.archiveDir, 'acme', 'widgets.bundle'), '--all')
+
+    const outcome = (await restoreRepo(REPO, layout)).unwrap()
+    expect(outcome.status).toBe('created')
+    expect(runGit(outcome.paths.gitDir, ['for-each-ref', '--format=%(refname)'])).toBe('refs/heads/main')
+    expect((await restoreRepo(REPO, layout)).unwrap().status).toBe('unchanged')
+
+    await syncRepo(targetOf(fixture), layout)
+    expect(runGit(outcome.paths.gitDir, ['for-each-ref', '--format=%(refname)'])).toBe('refs/heads/main')
+  })
+
+  test('fetches again when the cache cannot resolve HEAD despite matching refs', async () => {
+    using fixture = createFixtureRepo(FIRST)
     const layout = layoutOf(fixture)
     const synced = (await syncRepo(targetOf(fixture), layout)).unwrap()
+    const head = synced.metadata.head ?? ''
+    rmSync(join(synced.paths.gitDir, 'objects', head.slice(0, 2), head.slice(2)))
 
-    expect((await restoreRepo(REPO, layout)).unwrap()).toMatchObject({ status: 'empty', head: null })
+    const outcome = (await restoreRepo(REPO, layout)).unwrap()
 
-    using other = createFixtureRepo(FIRST)
-    copyFileSync(other.bundle, synced.paths.bundle)
-    const result = await restoreRepo(REPO, layout)
-    expect(result.isErr() && result.error.message).toContain('records an empty repository')
+    expect(outcome).toMatchObject({ status: 'updated', head })
+    expect(runGit(outcome.paths.gitDir, ['grep', '-l', 'needle', 'HEAD'])).toBe('HEAD:src/a.ts')
   })
 
   test('reports a missing bundle and unreadable metadata', async () => {
@@ -166,6 +213,9 @@ describe('listArchive', () => {
     writeFileSync(join(layout.archiveDir, 'zed', 'x.bundle.1234.tmp'), '')
     writeFileSync(join(layout.archiveDir, 'zed', 'notes.txt'), '')
     writeFileSync(join(layout.archiveDir, 'zed', 'bad name.bundle'), '')
+    mkdirSync(join(layout.archiveDir, 'zed', 'dir.bundle'))
+    writeFileSync(join(layout.archiveDir, '.DS_Store'), '')
+    symlinkSync(join(layout.archiveDir, 'acme'), join(layout.archiveDir, 'linked'))
 
     const entries = (await listArchive(layout)).unwrap()
 
