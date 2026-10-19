@@ -5,6 +5,7 @@
  */
 
 import { Result } from 'better-result'
+import { randomUUID } from 'node:crypto'
 import { mkdir, readFile, rename, writeFile } from 'node:fs/promises'
 import { dirname } from 'node:path'
 
@@ -62,7 +63,7 @@ export async function readMetadata(path: string): Promise<Result<RepoMetadata | 
  * reader never sees half of it.
  */
 export async function writeMetadata(path: string, metadata: RepoMetadata): Promise<Result<void, FileSystemError>> {
-  const temporary = `${path}.tmp`
+  const temporary = `${path}.${randomUUID()}.tmp`
   return Result.tryPromise({
     try: async () => {
       await mkdir(dirname(path), { recursive: true })
