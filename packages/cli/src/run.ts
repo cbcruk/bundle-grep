@@ -9,9 +9,10 @@ import { listCommand } from './commands/list-command'
 import { restoreCommand } from './commands/restore-command'
 import { searchCommand } from './commands/search-command'
 import { syncCommand } from './commands/sync-command'
+import { uiCommand } from './commands/ui-command'
 import { EXIT } from './exit-codes'
 
-const COMMANDS: readonly Command[] = [syncCommand, restoreCommand, searchCommand, listCommand]
+const COMMANDS: readonly Command[] = [syncCommand, restoreCommand, searchCommand, listCommand, uiCommand]
 
 const USAGE = `Usage: bundle-grep <command> [options]
 

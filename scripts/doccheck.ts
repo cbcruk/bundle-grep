@@ -27,7 +27,7 @@ const MEMBER = /^  (?!#|\/|\*|\})(?:readonly |static |async |get |set )*[A-Za-z_
 const missing: string[] = []
 const examples: { file: string; code: string }[] = []
 
-for (const rel of [...new Glob('packages/*/{src,test}/**/*.ts').scanSync(ROOT)].sort()) {
+for (const rel of [...new Glob('{packages,apps}/*/{src,test}/**/*.ts').scanSync(ROOT)].sort()) {
   if (rel.endsWith('.test.ts')) continue
   const text = await Bun.file(join(ROOT, rel)).text()
   const lines = text.split('\n')
@@ -86,7 +86,11 @@ try {
         skipLibCheck: true,
         noEmit: true,
         resolveJsonModule: true,
-        paths: { '@bundle-grep/core': [join(ROOT, 'packages/core/src/index.ts')] },
+        paths: {
+          '@bundle-grep/core': [join(ROOT, 'packages/core/src/index.ts')],
+          '@bundle-grep/desktop': [join(ROOT, 'apps/desktop/src/index.ts')],
+          barlo: [join(ROOT, 'apps/desktop/node_modules/barlo')],
+        },
       },
       files,
     }),
