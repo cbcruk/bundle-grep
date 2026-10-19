@@ -1,5 +1,6 @@
 import { describe, expect, test } from 'bun:test'
-import { homedir } from 'node:os'
+import { rmSync, writeFileSync } from 'node:fs'
+import { homedir, tmpdir } from 'node:os'
 import { join } from 'node:path'
 
 import { expandHome } from '../src/expand-home'
@@ -7,7 +8,7 @@ import { printable, stylesFor } from '../src/format/ansi'
 import { formatQueryError } from '../src/format/query-error'
 import { formatFile } from '../src/format/search-output'
 import { formatFailure } from '../src/format/status-line'
-import { batchSshEnv } from '../src/ssh-env'
+import { batchSshEnv, hasSshCommandConfig } from '../src/ssh-env'
 
 describe('printable', () => {
   test('replaces control characters one for one, keeping tabs', () => {
@@ -26,7 +27,8 @@ describe('formatFile', () => {
 
 describe('formatFailure', () => {
   test('keeps escapes from git and gh out of the terminal', () => {
-    expect(formatFailure('a/b', 'remote: \x1b[31mhi\r\n', stylesFor(false))).toBe('failed    a/b: remote: �[31mhi��\n')
+    expect(formatFailure('a/b', 'remote: \x1b[31mhi\r\n', stylesFor(false))).toBe('failed    a/b: remote: \ufffd[31mhi\n')
+    expect(formatFailure('a/b', 'fatal: one\r\nfatal: two\n\n', stylesFor(false))).toBe('failed    a/b: fatal: one\n    fatal: two\n')
   })
 })
 
@@ -54,5 +56,25 @@ describe('expandHome', () => {
     expect(expandHome('~/x')).toBe(join(homedir(), 'x'))
     expect(expandHome('a/~/x')).toBe('a/~/x')
     expect(expandHome('~user/x')).toBe('~user/x')
+  })
+})
+
+describe('hasSshCommandConfig', () => {
+  test('reads global config, not the repository it runs from', () => {
+    const saved = { GIT_CONFIG_GLOBAL: process.env.GIT_CONFIG_GLOBAL, GIT_CONFIG_NOSYSTEM: process.env.GIT_CONFIG_NOSYSTEM }
+    const config = join(tmpdir(), `bundle-grep-ssh-${process.pid}`)
+    writeFileSync(config, '[core]\n\tsshCommand = ssh -i key\n')
+    Object.assign(process.env, { GIT_CONFIG_GLOBAL: config, GIT_CONFIG_NOSYSTEM: '1' })
+    try {
+      expect(hasSshCommandConfig()).toBe(true)
+      process.env.GIT_CONFIG_GLOBAL = '/dev/null'
+      expect(hasSshCommandConfig()).toBe(false)
+    } finally {
+      for (const [key, value] of Object.entries(saved)) {
+        if (value === undefined) delete process.env[key]
+        else process.env[key] = value
+      }
+      rmSync(config, { force: true })
+    }
   })
 })

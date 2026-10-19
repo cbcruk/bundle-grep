@@ -6,7 +6,6 @@
 
 import { listGithubRepos, syncRepos, targetFromUrl, viewGithubRepo, type SyncTarget } from '@bundle-grep/core'
 import { Result } from 'better-result'
-import { existsSync } from 'node:fs'
 import { resolve } from 'node:path'
 
 import { parseCommandArgs, wholeNumber } from '../args'
@@ -27,8 +26,7 @@ Sources:
   <owner>          every repository of a GitHub user or organisation, via gh
   <owner>/<name>   one GitHub repository, via gh
   <url>            any git URL, such as https://… or git@host:owner/name
-  <path>           a local repository; prefix a relative one with ./ if it
-                   could be read as <owner>/<name>
+  <path>           a local repository, starting with /, ./, ../ or ~/
 
 Options:
   --limit <n>      fail for an owner with more repositories than this (default 1000)
@@ -37,6 +35,7 @@ Options:
   -h, --help       show this help
 `
 
+const LOCAL_PATH = /^(?:\.{1,2}(?:\/|$)|\/|~(?:\/|$))/
 const URL_LIKE = /^[a-z][a-z0-9+.-]*:\/\/|^[^/\s]+:/i
 const GITHUB = /^(?:https:\/\/github\.com\/|git@github\.com:|ssh:\/\/git@github\.com\/)/i
 
@@ -60,7 +59,7 @@ export async function targetsFor(source: string, io: Io, limit: number): Promise
     if (viewed.isOk()) return Result.ok(one({ ...viewed.value, url: target.url }))
     return Result.ok(one(target, `could not look ${target.owner}/${target.name} up with gh, so whether it is a fork or archived is unknown: ${viewed.error.message}`))
   }
-  if (/^[./~]/.test(source) || existsSync(source)) {
+  if (LOCAL_PATH.test(source)) {
     return targetFromUrl(resolve(expandHome(source))).map(target => one(target))
   }
   if (source.includes('/')) return (await viewGithubRepo(source, options)).map(target => one(target))

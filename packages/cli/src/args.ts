@@ -24,8 +24,9 @@ export type ParsedArgs<O extends Options> = ReturnType<
 >
 
 /**
- * Moves arguments that start with a single `-` but name no known short
- * option behind a `--`, so they reach the command as positionals.
+ * Moves arguments that start with a single `-` but are not exactly a known
+ * short option, such as `-h` or `-C 2` and `-C2`, behind a `--`, so they reach
+ * the command as positionals.
  */
 function looseArgs(args: readonly string[], options: Options): string[] {
   const takesValue = (name: string | undefined): boolean =>
@@ -39,13 +40,16 @@ function looseArgs(args: readonly string[], options: Options): string[] {
       break
     }
     const long = arg.startsWith('--') ? arg.slice(2) : undefined
-    const short = !long && arg.length > 1 && arg.startsWith('-') ? arg[1] : undefined
+    const short = !long && arg.startsWith('-') ? arg[1] : undefined
+    const known = short !== undefined && Object.values(options).some(option => option.short === short)
     if (long !== undefined) {
       flags.push(arg)
       if (!long.includes('=') && takesValue(long) && i + 1 < args.length) flags.push(args[++i]!)
-    } else if (short !== undefined && Object.values(options).some(option => option.short === short)) {
+    } else if (known && arg.length === 2) {
       flags.push(arg)
-      if (arg.length === 2 && takesValue(short) && i + 1 < args.length) flags.push(args[++i]!)
+      if (takesValue(short) && i + 1 < args.length) flags.push(args[++i]!)
+    } else if (known && takesValue(short) && /^\d+$/.test(arg.slice(2))) {
+      flags.push(arg)
     } else {
       positionals.push(arg)
     }
