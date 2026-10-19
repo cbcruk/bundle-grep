@@ -22,8 +22,8 @@ export interface LoadedRepos {
   repos: ArchivedRepo[]
   /** Repositories that were empty when synced, so hold nothing to search. */
   empty: ArchiveEntry[]
-  /** Repositories with no search cache yet; restore them to search them. */
+  /** Repositories with a bundle but no usable search cache; restore them to search them. */
   unrestored: ArchiveEntry[]
-  /** Metadata files that could not be read; their repositories are left out. */
+  /** Repositories left out: unreadable metadata, or neither a bundle nor a cache. */
   invalid: FileSystemError[]
 }

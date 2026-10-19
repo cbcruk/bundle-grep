@@ -141,6 +141,8 @@ function count(record: Record<string, number>, key: string): void {
  * {@linkcode SearchOptions.signal}, or reaching
  * {@linkcode SearchOptions.timeoutMs} — kills any git still running.
  *
+ * @template Repo The repositories' type, passed to `holds` as given.
+ *
  * @example Printing matching lines
  * ```ts
  * import { compileQuery, parseQuery, search } from "@bundle-grep/core";

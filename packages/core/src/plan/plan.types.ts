@@ -67,8 +67,8 @@ export interface LanguageLeaf {
 export interface FilterLeaf {
   /** Discriminant. */
   op: 'filter'
-  /** The qualifier key. */
-  key: FilterKey
+  /** The qualifier key; `language:` compiles to a {@linkcode LanguageLeaf} instead. */
+  key: Exclude<FilterKey, 'language'>
   /** The qualifier value. */
   value: string
 }
