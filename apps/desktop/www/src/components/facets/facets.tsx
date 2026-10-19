@@ -1,17 +1,13 @@
 import { useState } from 'react'
 
 import { hasFacet, toggleFacet } from '../../lib/query-edit'
-import type { Facet } from '../../lib/query-edit.types'
 import { Link } from '../link/link'
 import './facets.css'
 import type { FacetGroupProps, FacetsProps } from './facets.types'
+import { facetLabel } from './facets.utils'
 
 /** Entries a facet shows before "Show more". */
 const COLLAPSED = 8
-
-function label(facet: Facet): string {
-  return facet.kind === 'path' && facet.value === '' ? '(root)' : facet.value
-}
 
 function FacetGroup({ title, kind, query, counts }: FacetGroupProps): React.JSX.Element | null {
   const [expanded, setExpanded] = useState(false)
@@ -32,7 +28,7 @@ function FacetGroup({ title, kind, query, counts }: FacetGroupProps): React.JSX.
                 className={selected ? 'facet selected' : 'facet'}
                 title={selected ? 'Remove this filter' : 'Filter to this'}
               >
-                <span className="facet-name">{label(facet)}</span>
+                <span className="facet-name">{facetLabel(facet)}</span>
                 <span className="facet-count">{count}</span>
               </Link>
             </li>

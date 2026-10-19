@@ -16,8 +16,13 @@ export function bridge(): PageBridge {
 
 let token: Promise<string> | undefined
 
-/** This run's API token, fetched from the bridge once. */
+/** This run's API token, fetched from the bridge once; a failed fetch is tried again next time. */
 export function apiToken(): Promise<string> {
-  token ??= bridge().bundleGrepToken()
+  token ??= bridge()
+    .bundleGrepToken()
+    .catch((error: unknown) => {
+      token = undefined
+      throw error
+    })
   return token
 }

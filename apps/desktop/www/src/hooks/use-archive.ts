@@ -9,9 +9,10 @@ import { useCallback, useEffect, useState } from 'react'
 import type { BridgeResult } from '../api/api.types'
 import { bridge } from '../api/bridge'
 import type { RepoList } from '../../../src/desktop.types'
+import type { ArchiveState } from './use-archive.types'
 
 /** The archived repositories, `undefined` while loading, and a way to load them again after a sync. */
-export function useArchive(): { repos: BridgeResult<RepoList> | undefined; reload: () => void } {
+export function useArchive(): ArchiveState {
   const [repos, setRepos] = useState<BridgeResult<RepoList>>()
   const [generation, setGeneration] = useState(0)
 

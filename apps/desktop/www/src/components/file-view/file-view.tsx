@@ -7,11 +7,8 @@ import { isTyping } from '../../lib/keyboard'
 import { CodeLine } from '../file-result/code-line'
 import { Link } from '../link/link'
 import type { FileViewProps } from './file-view.types'
+import { lineId } from './file-view.utils'
 import './file-view.css'
-
-function lineId(number: number): string {
-  return `L${number}`
-}
 
 /**
  * One file at `HEAD`, with line numbers.
