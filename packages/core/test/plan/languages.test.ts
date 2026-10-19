@@ -16,6 +16,16 @@ describe('languageOf', () => {
     ['setup.cfg', 'INI'],
     ['schema.sql', 'SQL'],
     ['main.for', 'Fortran'],
+    ['App.tsx', 'TSX'],
+    ['View.mm', 'Objective-C++'],
+    ['Token.sol', 'Solidity'],
+    ['main.f', 'Fortran'],
+    ['app.properties', 'Java Properties'],
+    ['player.gd', 'GDScript'],
+    ['Component.vue', 'Vue'],
+    ['Cargo.toml', 'TOML'],
+    ['setup.ms', 'Roff'],
+    ['thesis.cls', 'TeX'],
   ])('%s is %s', (path, language) => {
     expect(languageOf(path)).toBe(language)
   })
@@ -33,7 +43,20 @@ describe('findLanguage', () => {
 
 describe('pinned extensions', () => {
   test('name languages that exist and claim the extension', () => {
-    for (const [extension, language] of Object.entries({ '.h': 'C', '.sql': 'SQL', '.for': 'Fortran', '.d': 'D', '.fs': 'F#', '.v': 'Verilog' })) {
+    const pinned = {
+      '.cfg': 'INI',
+      '.cls': 'TeX',
+      '.d': 'D',
+      '.f': 'Fortran',
+      '.for': 'Fortran',
+      '.fs': 'F#',
+      '.h': 'C',
+      '.ms': 'Roff',
+      '.sql': 'SQL',
+      '.v': 'Verilog',
+      '.yaml': 'YAML',
+    }
+    for (const [extension, language] of Object.entries(pinned)) {
       expect(findLanguage(language)?.extensions.map(e => e.toLowerCase())).toContain(extension)
     }
   })
