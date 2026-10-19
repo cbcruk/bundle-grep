@@ -8,8 +8,8 @@
 export interface RunProcessOptions {
   /** The directory to run in. */
   cwd?: string
-  /** Variables to set on top of the current environment. */
-  env?: Record<string, string>
+  /** Variables to set on top of the current environment; `undefined` removes one. */
+  env?: Record<string, string | undefined>
   /** Exit statuses that count as success, besides `0`. */
   allowExitCodes?: readonly number[]
   /** Kills the process when aborted; the run then fails. */

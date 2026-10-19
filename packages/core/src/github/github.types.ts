@@ -14,6 +14,6 @@ export interface GithubOptions {
 
 /** Options for {@linkcode listGithubRepos}. */
 export interface ListGithubReposOptions extends GithubOptions {
-  /** Most repositories to list; 1000 by default. */
+  /** Most repositories to list; 1000 by default. Listing fails when the account has more. */
   limit?: number
 }

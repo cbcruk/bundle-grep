@@ -9,6 +9,13 @@ import { spawn } from 'node:child_process'
 
 import type { ProcessFailure, ProcessOutput, RunProcessOptions } from './process.types'
 
+function withEnv(overrides: Record<string, string | undefined>): Record<string, string> {
+  const merged = { ...process.env, ...overrides }
+  return Object.fromEntries(
+    Object.entries(merged).filter((entry): entry is [string, string] => entry[1] !== undefined),
+  )
+}
+
 /**
  * Runs a command with the given arguments and waits for it to exit.
  *
@@ -25,7 +32,7 @@ export function runProcess(
     const spawned = Result.try(() =>
       spawn(command, args, {
         cwd: options.cwd,
-        env: options.env ? { ...process.env, ...options.env } : process.env,
+        env: options.env ? withEnv(options.env) : process.env,
         stdio: ['ignore', 'pipe', 'pipe'],
         signal: options.signal,
       }),

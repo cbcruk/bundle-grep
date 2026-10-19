@@ -19,7 +19,14 @@ import type { GitOutput } from '../git/git.types'
 import { runGit } from '../git/run-git'
 import type { SyncError, SyncEvent, SyncOptions, SyncOutcome, SyncStatus, SyncTarget } from './sync.types'
 
-const GITHUB_CREDENTIALS = ['-c', 'credential.https://github.com.helper=!gh auth git-credential']
+// The empty value clears the user's helpers for github.com, as `gh auth
+// setup-git` does, so gh's token is neither shadowed by nor stored into them.
+const GITHUB_CREDENTIALS = [
+  '-c',
+  'credential.https://github.com.helper=',
+  '-c',
+  'credential.https://github.com.helper=!gh auth git-credential',
+]
 
 function describe(cause: unknown): string {
   return cause instanceof Error ? cause.message : String(cause)
@@ -37,22 +44,43 @@ function parseSymref(output: GitOutput): string | null {
   return match?.[1] ?? null
 }
 
+function branchesOf(refs: string): string[] {
+  return refs.split('\n').flatMap(line => {
+    const ref = line.slice(line.indexOf(' ') + 1)
+    return ref.startsWith('refs/heads/') ? [ref.slice('refs/heads/'.length)] : []
+  })
+}
+
+function chooseHead(remoteHead: string | null, branches: readonly string[]): string | undefined {
+  return [remoteHead, 'main', 'master', branches[0]].find(
+    (branch): branch is string => branch !== null && branch !== undefined && branches.includes(branch),
+  )
+}
+
+function withoutPassword(url: string): string {
+  return url.replace(/^([a-z][a-z0-9+.-]*:\/\/)[^/@]*:[^/@]*@/i, '$1')
+}
+
 /**
  * Syncs one repository: fetches it into its bare mirror and rebuilds its bundle when its refs changed.
  *
  * The mirror at `cacheDir/<owner>/<name>.git` is created on first use and
  * holds every branch and tag; branches and tags deleted upstream are deleted
  * from it, and so from the next bundle. Pull request refs are left out.
- * `HEAD` follows the remote's default branch.
+ * `HEAD` follows the remote's default branch; when the remote does not name
+ * one that exists, it falls back to `main`, `master`, or the first branch.
  *
  * The bundle is rebuilt only when a digest of the refs differs from the one
- * in the existing metadata. It is written beside its destination, checked
+ * in the existing metadata, or when the bundle on disk no longer holds those
+ * refs. It is written beside its destination, checked
  * with `git bundle verify`, and renamed into place, so an interrupted sync
  * leaves the previous bundle intact. The metadata is rewritten on every sync,
  * so fork and archived flags stay current even when the code has not changed.
  *
  * For `https://github.com/` URLs, git can fall back to `gh` for credentials,
- * so private repositories work once `gh` is logged in. Git never prompts.
+ * replacing the user's own helpers for github.com, so private repositories
+ * work once `gh` is logged in. Git never prompts. A password in the URL is
+ * used to fetch but left out of the metadata.
  *
  * @returns What the sync did, or the first failure. A repository without
  * commits is not an error: it is synced as `empty`, with no bundle written
@@ -92,12 +120,10 @@ export function syncRepo(target: SyncTarget, options: SyncOptions): Promise<Resu
       ]),
     )
     const remoteHead = parseSymref(yield* Result.await(git([...credentials, 'ls-remote', '--symref', '--', url, 'HEAD'])))
-    if (remoteHead !== null) {
-      const exists = yield* Result.await(git(['show-ref', '--verify', '--quiet', `refs/heads/${remoteHead}`], [1]))
-      if (exists.exitCode === 0) yield* Result.await(git(['symbolic-ref', 'HEAD', `refs/heads/${remoteHead}`]))
-    }
-
     const refs = (yield* Result.await(git(['for-each-ref', '--format=%(objectname) %(refname)']))).stdout
+    const headBranch = chooseHead(remoteHead, branchesOf(refs.toString('utf8')))
+    if (headBranch !== undefined) yield* Result.await(git(['symbolic-ref', 'HEAD', `refs/heads/${headBranch}`]))
+
     const symref = (yield* Result.await(git(['symbolic-ref', '--quiet', 'HEAD'], [1]))).stdout.toString('utf8').trim()
     const resolved = yield* Result.await(git(['rev-parse', '--verify', '--quiet', 'HEAD^{commit}'], [1]))
     const head = resolved.exitCode === 0 ? resolved.stdout.toString('utf8').trim() : null
@@ -110,7 +136,7 @@ export function syncRepo(target: SyncTarget, options: SyncOptions): Promise<Resu
         ? 'empty'
         : !hasBundle
           ? 'created'
-          : previous?.refsDigest === refsDigest
+          : previous?.refsDigest === refsDigest && (await bundleHolds(paths.bundle, refs, git))
             ? 'unchanged'
             : 'updated'
 
@@ -120,7 +146,7 @@ export function syncRepo(target: SyncTarget, options: SyncOptions): Promise<Resu
       version: 1,
       owner: target.owner,
       name: target.name,
-      url,
+      url: withoutPassword(url),
       isFork: target.isFork ?? false,
       isArchived: target.isArchived ?? false,
       isPrivate: target.isPrivate ?? null,
@@ -137,6 +163,21 @@ export function syncRepo(target: SyncTarget, options: SyncOptions): Promise<Resu
   })
 }
 
+async function bundleHolds(
+  bundle: string,
+  refs: Buffer,
+  git: (args: string[]) => Promise<Result<GitOutput, GitError>>,
+): Promise<boolean> {
+  const heads = await git(['bundle', 'list-heads', bundle])
+  if (heads.isErr()) return false
+  const listed = heads.value.stdout
+    .toString('utf8')
+    .split('\n')
+    .filter(line => line !== '' && !line.endsWith(' HEAD'))
+  const expected = refs.toString('utf8').split('\n').filter(line => line !== '')
+  return listed.sort().join('\n') === expected.sort().join('\n')
+}
+
 async function writeBundle(
   paths: ArchivePaths,
   git: (args: string[]) => Promise<Result<GitOutput, GitError>>,
@@ -144,6 +185,13 @@ async function writeBundle(
   const temporary = `${paths.bundle}.tmp`
   const written = await Result.gen(async function* () {
     yield* Result.await(fileSystem(paths.bundle, () => mkdir(dirname(paths.bundle), { recursive: true })))
+    // A sync killed mid-write leaves these behind, and git refuses to write past its lock.
+    yield* Result.await(
+      fileSystem(temporary, async () => {
+        await rm(temporary, { force: true })
+        await rm(`${temporary}.lock`, { force: true })
+      }),
+    )
     yield* Result.await(git(['bundle', 'create', '--quiet', temporary, '--all']))
     yield* Result.await(git(['bundle', 'verify', '--quiet', temporary]))
     yield* Result.await(fileSystem(paths.bundle, () => rename(temporary, paths.bundle)))
