@@ -281,3 +281,19 @@ describe('errors', () => {
     expect(error('repo:/abc/')).toEqual({ message: 'Qualifier repo: does not accept a regular expression', offset: 5, length: 5 })
   })
 })
+
+describe('path: with a leading slash', () => {
+  test('an anchored glob is a literal, not a regex', () => {
+    expect(tree('path:/src/**/*.js')).toEqual({ match: 'path', kind: 'literal', value: '/src/**/*.js', quoted: false })
+  })
+
+  test('an anchored prefix without a closing slash is a literal', () => {
+    expect(tree('path:/src')).toEqual({ match: 'path', kind: 'literal', value: '/src', quoted: false })
+  })
+
+  test('a regex followed by the end of the term stays a regex', () => {
+    expect(tree('path:/^src\\// foo')).toEqual({
+      and: [{ match: 'path', kind: 'regex', source: '^src/' }, term('foo')],
+    })
+  })
+})

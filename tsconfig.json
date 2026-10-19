@@ -1,14 +1,23 @@
 {
   "compilerOptions": {
-    "lib": ["ESNext"],
+    "lib": [
+      "ESNext"
+    ],
     "target": "ESNext",
     "module": "Preserve",
     "moduleResolution": "bundler",
-    "types": ["bun"],
+    "types": [
+      "bun"
+    ],
     "strict": true,
     "noUncheckedIndexedAccess": true,
     "skipLibCheck": true,
-    "noEmit": true
+    "noEmit": true,
+    "resolveJsonModule": true
   },
-  "include": ["packages/*/src", "packages/*/test", "scripts"]
+  "include": [
+    "packages/*/src",
+    "packages/*/test",
+    "scripts"
+  ]
 }
