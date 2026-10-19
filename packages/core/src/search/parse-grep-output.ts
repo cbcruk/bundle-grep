@@ -6,7 +6,6 @@
 
 import type { GrepLine } from './search.types'
 
-
 const NUL = 0
 const NEWLINE = 10
 const SEPARATOR = Buffer.from('--\n')
@@ -62,7 +61,7 @@ export function parseGrepOutput(output: Buffer, ref: string): GrepLine[] {
       path: rawPath.startsWith(prefix) ? rawPath.slice(prefix.length) : rawPath,
       number: Number(output.toString('latin1', path.end + 1, number.end)),
       byteColumn,
-      text: output.toString('utf8', textStart, text.end),
+      text: output.toString('utf8', textStart, text.end).replace(/\r$/, ''),
     })
     i = text.end + 1
   }

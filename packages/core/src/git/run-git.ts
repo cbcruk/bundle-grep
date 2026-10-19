@@ -23,11 +23,21 @@ import type { GitOutput, RunGitOptions } from './git.types'
  */
 export function runGit(args: readonly string[], options: RunGitOptions): Promise<Result<GitOutput, GitError>> {
   return new Promise(resolve => {
-    const child = spawn('git', ['-c', 'color.ui=never', ...args], {
-      cwd: options.cwd,
-      stdio: ['ignore', 'pipe', 'pipe'],
-      signal: options.signal,
-    })
+    // spawn throws synchronously for some failures, such as E2BIG.
+    const spawned = Result.try(() =>
+      spawn('git', ['-c', 'color.ui=never', ...args], {
+        cwd: options.cwd,
+        stdio: ['ignore', 'pipe', 'pipe'],
+        signal: options.signal,
+      }),
+    )
+    if (spawned.isErr()) {
+      const cause = spawned.error.cause
+      const reason = cause instanceof Error ? cause.message : String(cause)
+      resolve(Result.err(new GitError({ args, exitCode: null, stderr: '', message: `Could not run git: ${reason}` })))
+      return
+    }
+    const child = spawned.value
     const stdout: Buffer[] = []
     const stderr: Buffer[] = []
     child.stdout.on('data', (chunk: Buffer) => stdout.push(chunk))

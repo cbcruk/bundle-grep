@@ -10,11 +10,17 @@ import { escapeRegex } from '../plan/path-regex'
 import type { Pattern } from '../query/query.types'
 import type { MatchRange } from './search.types'
 
+/**
+ * Compiles a highlight pattern in Unicode mode, so ranges never split a
+ * surrogate pair and PCRE escapes JavaScript lacks, like `\A`, fail to compile
+ * instead of matching a literal letter.
+ */
 function toRegex(pattern: Pattern): RegExp | undefined {
-  if (pattern.kind === 'literal') return new RegExp(escapeRegex(pattern.value), 'gi')
-  const caseSensitive = pattern.source.startsWith('(?-i)')
-  const source = caseSensitive ? pattern.source.slice('(?-i)'.length) : pattern.source
-  return Result.try(() => new RegExp(source, caseSensitive ? 'g' : 'gi')).unwrapOr(undefined)
+  if (pattern.kind === 'literal') return new RegExp(escapeRegex(pattern.value), 'giu')
+  const flag = /^\(\?(-?)i\)/.exec(pattern.source)
+  const caseSensitive = flag?.[1] === '-'
+  const source = flag ? pattern.source.slice(flag[0].length) : pattern.source
+  return Result.try(() => new RegExp(source, caseSensitive ? 'gu' : 'giu')).unwrapOr(undefined)
 }
 
 /**

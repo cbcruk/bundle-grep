@@ -17,10 +17,22 @@ import type { Pattern } from '../query/query.types'
 import { byteColumnToIndex, createHighlighter } from './match-ranges'
 import { parseGrepOutput } from './parse-grep-output'
 import { PcreUnavailableError } from './search.errors'
-import type { SearchEvent, SearchFacets, SearchLine, SearchOptions, SearchRepo, SearchRepoError } from './search.types'
+import type {
+  LineOptions,
+  SearchEvent,
+  SearchFacets,
+  SearchLine,
+  SearchOptions,
+  SearchRepo,
+  SearchRepoError,
+} from './search.types'
 
-/** Above this many files, line extraction greps the whole tree and filters rather than naming each file. */
-const MAX_LITERAL_PATHSPECS = 500
+/**
+ * Most bytes of `:(literal)` pathspecs to put on one command line; beyond it,
+ * line extraction greps the whole tree and filters instead. Kept well under
+ * Windows' 32 KiB limit, the smallest of the platforms git runs on.
+ */
+const MAX_PATHSPEC_BYTES = 24 * 1024
 
 /**
  * Tells a git built without PCRE apart from other git failures.
@@ -46,26 +58,23 @@ function engineGroups(patterns: readonly Pattern[]): GrepLeaf[] {
   ]
 }
 
-interface LineOptions {
-  repo: SearchRepo
-  ref: string
-  files: readonly string[]
-  patterns: readonly Pattern[]
-  context: number
-  maxMatchesPerFile: number
-  signal: AbortSignal
+function literalPathspecs(files: readonly string[]): string[] {
+  const pathspecs = files.map(path => `:(literal)${path}`)
+  const bytes = pathspecs.reduce((total, pathspec) => total + Buffer.byteLength(pathspec) + 1, 0)
+  return bytes <= MAX_PATHSPEC_BYTES ? pathspecs : []
 }
 
 /**
  * Collects matching and context lines for a set of files.
  *
- * Runs one `git grep` per pattern engine and merges them, a line that matched
- * in either run winning over the same line shown as context.
+ * Runs one `git grep` per pattern engine and merges them: a line that matched
+ * in either run wins over the same line shown as context, and keeps the
+ * earlier of the two runs' first-match columns.
  */
-async function collectLines(options: LineOptions): Promise<Result<Map<string, SearchLine[]>, GitError>> {
+export async function collectLines(options: LineOptions): Promise<Result<Map<string, SearchLine[]>, GitError>> {
   const { repo, ref, files, patterns, context, maxMatchesPerFile, signal } = options
   const wanted = new Set(files)
-  const pathspecs = files.length <= MAX_LITERAL_PATHSPECS ? files.map(path => `:(literal)${path}`) : []
+  const pathspecs = literalPathspecs(files)
   const highlight = createHighlighter(patterns)
   const byFile = new Map<string, Map<number, SearchLine>>()
 
@@ -91,14 +100,18 @@ async function collectLines(options: LineOptions): Promise<Result<Map<string, Se
       if (!wanted.has(line.path)) continue
       const lines = byFile.get(line.path) ?? new Map<number, SearchLine>()
       byFile.set(line.path, lines)
-      const isMatch = line.byteColumn !== undefined
-      if (!isMatch && lines.has(line.number)) continue
+      const existing = lines.get(line.number)
+      if (line.byteColumn === undefined) {
+        if (!existing) lines.set(line.number, { number: line.number, text: line.text, context: true, ranges: [] })
+        continue
+      }
+      const column = byteColumnToIndex(line.text, line.byteColumn)
       lines.set(line.number, {
         number: line.number,
         text: line.text,
-        context: !isMatch,
-        column: isMatch ? byteColumnToIndex(line.text, line.byteColumn!) : undefined,
-        ranges: isMatch ? highlight(line.text) : [],
+        context: false,
+        column: existing?.column === undefined ? column : Math.min(existing.column, column),
+        ranges: existing && !existing.context ? existing.ranges : highlight(line.text),
       })
     }
   }
@@ -118,9 +131,11 @@ function count(record: Record<string, number>, key: string): void {
  * Repositories are searched {@linkcode SearchOptions.concurrency} at a time,
  * and one ruled out by its qualifiers is skipped without running git. Each
  * repository's matching files arrive in path order; repositories arrive as
- * they finish. A repository that fails yields a `repo-error` and the rest
- * carry on. The last event is always `done`, carrying the total and facets over
- * every matching file even when `file` events stopped at the limit.
+ * they finish. A repository that fails yields a `repo-error`, counts towards
+ * nothing, and the rest carry on; its share of the limit is not handed to
+ * repositories that already finished. The last event is `done`, carrying the
+ * total and facets over every matching file even when `file` events stopped at
+ * the limit. A `holds` callback that throws rejects the search instead.
  *
  * Stopping early — breaking out of the loop, aborting
  * {@linkcode SearchOptions.signal}, or reaching
@@ -141,7 +156,9 @@ function count(record: Record<string, number>, key: string): void {
  * ```
  */
 export async function* search(options: SearchOptions): AsyncGenerator<SearchEvent, void, undefined> {
-  const { plan, repos, holds, limit = 100, context = 0, maxMatchesPerFile = 20, concurrency = 4 } = options
+  const { plan, repos, holds, context = 0, maxMatchesPerFile = 20 } = options
+  const limit = Math.max(0, options.limit ?? 100)
+  const concurrency = Math.max(1, options.concurrency ?? 4)
 
   const finished = new AbortController()
   const timeout = options.timeoutMs === undefined ? undefined : AbortSignal.timeout(options.timeoutMs)
@@ -159,6 +176,7 @@ export async function* search(options: SearchOptions): AsyncGenerator<SearchEven
   const facets: SearchFacets = { languages: {}, repos: {}, paths: {} }
   let totalFiles = 0
   let reserved = 0
+  let emitted = 0
 
   const searchRepo = async (repo: SearchRepo): Promise<void> => {
     const expr = specializePlan(plan.expr, filter => holds(repo, filter))
@@ -172,21 +190,14 @@ export async function* search(options: SearchOptions): AsyncGenerator<SearchEven
       return
     }
 
-    for (const path of files.value) {
-      totalFiles++
-      count(facets.repos, repo.name)
-      count(facets.paths, path.includes('/') ? path.slice(0, path.indexOf('/')) : '')
-      const language = languageOf(path)
-      if (language) count(facets.languages, language)
-    }
-
+    const languages = new Map(files.value.map(path => [path, languageOf(path)]))
     const shown = files.value.slice(0, Math.max(0, limit - reserved))
-    if (shown.length === 0) return
     reserved += shown.length
 
-    const lines = plan.highlight.length
-      ? await collectLines({ repo, ref, files: shown, patterns: plan.highlight, context, maxMatchesPerFile, signal: stop })
-      : Result.ok(new Map<string, SearchLine[]>())
+    const lines =
+      plan.highlight.length && shown.length
+        ? await collectLines({ repo, ref, files: shown, patterns: plan.highlight, context, maxMatchesPerFile, signal: stop })
+        : Result.ok(new Map<string, SearchLine[]>())
     if (stop.aborted) return
     if (lines.isErr()) {
       reserved -= shown.length
@@ -194,8 +205,15 @@ export async function* search(options: SearchOptions): AsyncGenerator<SearchEven
       return
     }
 
+    for (const [path, language] of languages) {
+      totalFiles++
+      count(facets.repos, repo.name)
+      count(facets.paths, path.includes('/') ? path.slice(0, path.indexOf('/')) : '')
+      if (language) count(facets.languages, language)
+    }
     for (const path of shown) {
-      push({ type: 'file', repo: repo.name, path, language: languageOf(path), lines: lines.value.get(path) ?? [] })
+      emitted++
+      push({ type: 'file', repo: repo.name, path, language: languages.get(path), lines: lines.value.get(path) ?? [] })
     }
   }
 
@@ -220,11 +238,12 @@ export async function* search(options: SearchOptions): AsyncGenerator<SearchEven
       await new Promise<void>(resolve => (wake = resolve))
       wake = undefined
     }
+    await all
 
     const stopped = options.signal?.aborted ? 'aborted' : timeout?.aborted ? 'timeout' : undefined
-    yield { type: 'done', totalFiles, facets, truncated: totalFiles > reserved, ...(stopped ? { stopped } : {}) }
+    yield { type: 'done', totalFiles, facets, truncated: totalFiles > emitted, ...(stopped ? { stopped } : {}) }
   } finally {
     finished.abort()
-    await all
+    await all.catch(() => undefined)
   }
 }
