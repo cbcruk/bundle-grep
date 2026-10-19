@@ -9,17 +9,7 @@ import { Result } from 'better-result'
 import type { GitError } from '../git/git.errors'
 import { runGit, splitNul } from '../git/run-git'
 import { grepArgs } from './grep-args'
-import type { FileExpr, LanguageLeaf } from './plan.types'
-
-/** Options for {@linkcode listMatchingFiles}. */
-export interface ListMatchingFilesOptions {
-  /** The repository, usually a bare clone of a bundle. */
-  gitDir: string
-  /** The expression, already free of repository qualifiers. */
-  expr: FileExpr
-  /** The tree to search. Defaults to `HEAD`. */
-  ref?: string
-}
+import type { FileExpr, LanguageLeaf, ListMatchingFilesOptions } from './plan.types'
 
 type FileSet = Result<Set<string>, GitError>
 
@@ -61,12 +51,38 @@ export function narrowingPathspecs(expr: FileExpr): string[] {
   return []
 }
 
+function stripRef(paths: string[], ref: string): string[] {
+  const prefix = `${ref}:`
+  return paths.map(path => (path.startsWith(prefix) ? path.slice(prefix.length) : path))
+}
+
 /**
- * Lists the files in a tree that an expression selects.
+ * Lists the text files of a tree: non-empty ones `git grep -I` reads, plus empty blobs.
  *
- * Runs one `git ls-tree` for the tree's file list and one `git grep -l` per
- * `grep` leaf, then combines the sets in memory. Binary files never match a
- * `grep` leaf, as on GitHub.
+ * Binary files are left out of the universe, as GitHub does not index them,
+ * so they match nothing — not even a `NOT` or a `path:`.
+ */
+async function listTextFiles(gitDir: string, ref: string): Promise<FileSet> {
+  const [nonEmpty, tree] = await Promise.all([
+    runGit(['grep', '-I', '-l', '-z', '-e', '', ref], { cwd: gitDir, allowExitCodes: [1] }),
+    runGit(['ls-tree', '-r', '-l', '-z', ref], { cwd: gitDir }),
+  ])
+  if (nonEmpty.isErr()) return nonEmpty
+  if (tree.isErr()) return tree
+
+  const files = new Set(stripRef(splitNul(nonEmpty.value.stdout), ref))
+  for (const entry of splitNul(tree.value.stdout)) {
+    const match = /^\d+ blob [0-9a-f]+ +0\t(.*)$/s.exec(entry)
+    if (match) files.add(match[1]!)
+  }
+  return Result.ok(files)
+}
+
+/**
+ * Lists the text files in a tree that an expression selects.
+ *
+ * Builds the tree's text-file list once and runs one `git grep -l` per `grep`
+ * leaf, then combines the sets in memory.
  *
  * @returns The matching paths, sorted, or the first git failure.
  */
@@ -76,9 +92,7 @@ export async function listMatchingFiles(options: ListMatchingFilesOptions): Prom
   let universe: Promise<FileSet> | undefined
 
   const allFiles = (): Promise<FileSet> => {
-    universe ??= runGit(['ls-tree', '-r', '-z', '--name-only', ref], { cwd: gitDir }).then(result =>
-      result.map(({ stdout }) => new Set(splitNul(stdout))),
-    )
+    universe ??= listTextFiles(gitDir, ref)
     return universe
   }
 
@@ -92,18 +106,15 @@ export async function listMatchingFiles(options: ListMatchingFilesOptions): Prom
       case 'none':
         return Result.ok(new Set())
       case 'path': {
-        const regex = new RegExp(node.regex, 'i')
+        const regex = new RegExp(node.regex, node.ignoreCase ? 'i' : '')
         return filterAll(path => regex.test(path))
       }
       case 'language':
         return filterAll(path => matchesLanguage(node, path))
       case 'grep': {
         const args = ['grep', '-l', '-z', '-I', ...grepArgs(node), ref, '--', ...pathspecs]
-        const prefix = `${ref}:`
         const result = await runGit(args, { cwd: gitDir, allowExitCodes: [1] })
-        return result.map(
-          ({ stdout }) => new Set(splitNul(stdout).map(path => (path.startsWith(prefix) ? path.slice(prefix.length) : path))),
-        )
+        return result.map(({ stdout }) => new Set(stripRef(splitNul(stdout), ref)))
       }
       case 'not': {
         const [files, excluded] = await Promise.all([allFiles(), evaluate(node.child)])

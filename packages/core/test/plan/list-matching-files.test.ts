@@ -23,6 +23,7 @@ beforeAll(() => {
         'Dockerfile': 'FROM oven/bun\n',
         'docs/useState.md': 'Nothing to see\n',
         'image.png': '\u0000\u0001binary useState\u0000',
+        'src/empty.ts': '',
       },
     },
   ])
@@ -65,13 +66,13 @@ describe('listMatchingFiles', () => {
   })
 
   test('path globs follow GitHub', async () => {
-    expect(await search('path:*.ts')).toEqual(['src/use-counter.ts', 'test/use-counter.test.ts'])
-    expect(await search('path:/src/*.ts*')).toEqual(['src/app.tsx', 'src/use-counter.ts'])
+    expect(await search('path:*.ts')).toEqual(['src/empty.ts', 'src/use-counter.ts', 'test/use-counter.test.ts'])
+    expect(await search('path:/src/*.ts*')).toEqual(['src/app.tsx', 'src/empty.ts', 'src/use-counter.ts'])
     expect(await search('path:/src/**/*.js')).toEqual(['src/lib/deep.js'])
   })
 
   test('language: matches extensions and filenames', async () => {
-    expect(await search('language:typescript')).toEqual(['src/use-counter.ts', 'test/use-counter.test.ts'])
+    expect(await search('language:typescript')).toEqual(['src/empty.ts', 'src/use-counter.ts', 'test/use-counter.test.ts'])
     expect(await search('language:dockerfile')).toEqual(['Dockerfile'])
     expect(await search('useState language:typescript NOT path:test')).toEqual(['src/use-counter.ts'])
   })
@@ -79,6 +80,26 @@ describe('listMatchingFiles', () => {
   test('a repository qualifier that does not hold matches nothing', async () => {
     expect(await search('useState repo:a/b', () => false)).toEqual([])
     expect(await search('content:FROM OR repo:a/b', () => true)).toHaveLength(7)
+  })
+
+  test('binary files match nothing, not even NOT or path:', async () => {
+    expect(await search('NOT content:zzzz')).not.toContain('image.png')
+    expect(await search('path:*.png')).toEqual([])
+  })
+
+  test('empty files are part of the tree', async () => {
+    expect(await search('path:empty')).toEqual(['src/empty.ts'])
+  })
+
+  test('a path regex can be case-sensitive', async () => {
+    expect(await search('path:/(?-i)usestate/')).toEqual([])
+    expect(await search('path:/(?-i)useState/')).toEqual(['docs/useState.md'])
+  })
+
+  test("the user's colour config does not leak into parsed output", async () => {
+    runGit(gitDir, ['config', 'color.ui', 'always'])
+    expect(await search('content:useState NOT path:test')).toEqual(['src/use-counter.ts'])
+    runGit(gitDir, ['config', '--unset', 'color.ui'])
   })
 
   test('a git failure is a value', async () => {

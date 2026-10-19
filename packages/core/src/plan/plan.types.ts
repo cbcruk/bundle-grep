@@ -11,7 +11,7 @@
  * @module
  */
 
-import type { FilterKey, Pattern, Span } from '../query/query.types'
+import type { FilterKey, Pattern } from '../query/query.types'
 
 /** Every file in the tree. */
 export interface AllLeaf {
@@ -41,12 +41,14 @@ export interface GrepLeaf {
   match: 'any' | 'all'
 }
 
-/** The files whose path matches a regular expression, case-insensitively. */
+/** The files whose path matches a regular expression. */
 export interface PathLeaf {
   /** Discriminant. */
   op: 'path'
   /** A JavaScript regular expression source, tested against the path relative to the repository root. */
   regex: string
+  /** `false` only when the query opted out with a leading `(?-i)`. */
+  ignoreCase: boolean
 }
 
 /** The files Linguist assigns to a language, by extension or exact filename. */
@@ -107,5 +109,22 @@ export interface SearchPlan {
   highlight: Pattern[]
 }
 
-/** Where a compile error points, reusing the parser's spans. */
-export type { Span }
+/** What `language:` needs to know about one Linguist language. */
+export interface Language {
+  /** The canonical name, such as `"TypeScript"`. */
+  name: string
+  /** Extensions including the dot. */
+  extensions: string[]
+  /** Exact file names. */
+  filenames: string[]
+}
+
+/** Options for {@linkcode listMatchingFiles}. */
+export interface ListMatchingFilesOptions {
+  /** The repository, usually a bare clone of a bundle. */
+  gitDir: string
+  /** The expression, already free of repository qualifiers. */
+  expr: FileExpr
+  /** The tree to search. Defaults to `HEAD`. */
+  ref?: string
+}

@@ -7,16 +7,7 @@
  */
 
 import data from './languages.generated.json'
-
-/** What `language:` needs to know about one Linguist language. */
-export interface Language {
-  /** The canonical name, such as `"TypeScript"`. */
-  name: string
-  /** Extensions including the dot. */
-  extensions: string[]
-  /** Exact file names. */
-  filenames: string[]
-}
+import type { Language } from './plan.types'
 
 function normalize(name: string): string {
   return name.toLowerCase().replace(/\s+/g, '-')
@@ -32,6 +23,9 @@ for (const [name, language] of Object.entries(data.languages)) {
 
 /**
  * Finds a language by its name or one of its aliases.
+ *
+ * Membership is by extension and filename only, without Linguist's content
+ * heuristics, so a `.h` file counts as C, C++, and Objective-C alike.
  *
  * Matching ignores case and treats whitespace as `-`, so `Common Lisp`,
  * `common lisp`, and `common-lisp` are the same language.
