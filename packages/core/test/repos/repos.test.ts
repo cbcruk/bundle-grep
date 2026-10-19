@@ -4,7 +4,7 @@ import { join } from 'node:path'
 
 import { compileQuery, loadArchivedRepos, parseQuery, repoHolds, restoreRepo, search, syncRepo } from '../../src'
 import type { ArchivedRepo, ArchiveLayout, FilterLeaf, RepoMetadata } from '../../src'
-import { createFixtureRepo, isolateGitConfig, type FixtureRepo } from '../fixture'
+import { createFixtureRepo, isolateGitConfig, runGit, type FixtureRepo } from '../fixture'
 
 isolateGitConfig()
 
@@ -90,10 +90,18 @@ describe('loadArchivedRepos and search', () => {
       { owner: 'acme', name: 'old', url, isArchived: true },
       { owner: 'Other', name: 'tools', url },
       { owner: 'other', name: 'unrestored', url },
+      { owner: 'acme', name: 'halfbuilt', url },
+      { owner: 'acme', name: 'lost', url },
     ]) {
       ;(await syncRepo(target, layout)).unwrap()
     }
     rmSync(join(layout.cacheDir, 'other', 'unrestored.git'), { recursive: true })
+    const halfBuilt = join(layout.cacheDir, 'acme', 'halfbuilt.git')
+    rmSync(halfBuilt, { recursive: true })
+    mkdirSync(halfBuilt)
+    runGit(halfBuilt, ['init', '--quiet', '--bare'])
+    rmSync(join(layout.cacheDir, 'acme', 'lost.git'), { recursive: true })
+    rmSync(join(layout.archiveDir, 'acme', 'lost.bundle'))
 
     using empty = createFixtureRepo([])
     ;(await syncRepo({ owner: 'acme', name: 'empty', url: empty.repo }, layout)).unwrap()
@@ -118,6 +126,15 @@ describe('loadArchivedRepos and search', () => {
     return names.sort()
   }
 
+  test('a restored half-built cache becomes searchable', async () => {
+    const half = (await loadArchivedRepos(layout)).unwrap().unrestored.find(entry => entry.name === 'halfbuilt')!
+    expect((await restoreRepo(half, layout)).unwrap().status).toBe('updated')
+    expect((await loadArchivedRepos(layout)).unwrap().repos.map(repo => repo.name)).toContain('acme/halfbuilt')
+    rmSync(half.paths.gitDir, { recursive: true })
+    mkdirSync(half.paths.gitDir)
+    runGit(half.paths.gitDir, ['init', '--quiet', '--bare'])
+  })
+
   test('sorts the archive into searchable, empty, unrestored and invalid', async () => {
     const loaded = (await loadArchivedRepos(layout)).unwrap()
 
@@ -125,8 +142,11 @@ describe('loadArchivedRepos and search', () => {
     expect(loaded.repos.find(repo => repo.name === 'acme/fork')?.metadata?.isFork).toBe(true)
     expect(loaded.repos.find(repo => repo.name === 'loose/bare')?.metadata).toBeUndefined()
     expect(loaded.empty.map(entry => entry.name)).toEqual(['empty'])
-    expect(loaded.unrestored.map(entry => entry.name)).toEqual(['unrestored'])
-    expect(loaded.invalid.map(error => error.path)).toEqual([join(layout.archiveDir, 'acme', 'broken.json')])
+    expect(loaded.unrestored.map(entry => entry.name).sort()).toEqual(['halfbuilt', 'unrestored'])
+    expect(loaded.invalid.map(error => error.path)).toEqual([
+      join(layout.archiveDir, 'acme', 'broken.json'),
+      join(layout.archiveDir, 'acme', 'lost.bundle'),
+    ])
   })
 
   test('a missing archive holds nothing', async () => {

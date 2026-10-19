@@ -44,7 +44,5 @@ export function repoHolds(repo: ArchivedRepo, filter: FilterLeaf): boolean {
       if (value === 'fork') return repo.metadata?.isFork ?? false
       if (value === 'archived') return repo.metadata?.isArchived ?? false
       return false
-    case 'language':
-      return true
   }
 }
