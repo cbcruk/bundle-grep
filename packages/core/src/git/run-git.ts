@@ -13,8 +13,10 @@ import type { GitOutput, RunGitOptions } from './git.types'
 /**
  * Runs git with the given arguments and waits for it to exit.
  *
- * Colour is forced off, since a user's `color.ui=always` would otherwise put
- * escape codes into output that is parsed.
+ * `color.ui` is forced off, since a user's `color.ui=always` would otherwise
+ * put escape codes into output that is parsed. A command-specific setting such
+ * as `color.grep` still wins over it, so callers parsing output also pass
+ * `--no-color`.
  *
  * @returns The output, or a {@linkcode GitError} when git cannot start or
  * exits with a status outside `0` and `allowExitCodes`.

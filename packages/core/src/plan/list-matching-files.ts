@@ -64,7 +64,7 @@ function stripRef(paths: string[], ref: string): string[] {
  */
 async function listTextFiles(gitDir: string, ref: string): Promise<FileSet> {
   const [nonEmpty, tree] = await Promise.all([
-    runGit(['grep', '-I', '-l', '-z', '-e', '', ref], { cwd: gitDir, allowExitCodes: [1] }),
+    runGit(['grep', '--no-color', '-I', '-l', '-z', '-e', '', ref], { cwd: gitDir, allowExitCodes: [1] }),
     runGit(['ls-tree', '-r', '-l', '-z', ref], { cwd: gitDir }),
   ])
   if (nonEmpty.isErr()) return nonEmpty
@@ -112,7 +112,7 @@ export async function listMatchingFiles(options: ListMatchingFilesOptions): Prom
       case 'language':
         return filterAll(path => matchesLanguage(node, path))
       case 'grep': {
-        const args = ['grep', '-l', '-z', '-I', ...grepArgs(node), ref, '--', ...pathspecs]
+        const args = ['grep', '--no-color', '-l', '-z', '-I', ...grepArgs(node), ref, '--', ...pathspecs]
         const result = await runGit(args, { cwd: gitDir, allowExitCodes: [1] })
         return result.map(({ stdout }) => new Set(stripRef(splitNul(stdout), ref)))
       }
