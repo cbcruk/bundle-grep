@@ -47,6 +47,9 @@ export type {
   SearchRepoError,
 } from './search/search.types'
 export { QueryParseError } from './query/query.errors'
+export { loadArchivedRepos } from './repos/load-archived-repos'
+export { repoHolds } from './repos/repo-holds'
+export type { ArchivedRepo, LoadedRepos } from './repos/repos.types'
 export { restoreRepo, restoreRepos } from './restore/restore-repo'
 export type { RestoreError, RestoreEvent, RestoreOptions, RestoreOutcome, RestoreStatus } from './restore/restore.types'
 export { syncRepo, syncRepos } from './sync/sync-repo'

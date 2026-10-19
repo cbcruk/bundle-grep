@@ -129,14 +129,21 @@ export interface LineOptions {
   signal: AbortSignal
 }
 
-/** Options for {@linkcode search}. */
-export interface SearchOptions {
+/**
+ * Options for {@linkcode search}.
+ *
+ * @template Repo The repositories' type, which `holds` receives as given.
+ */
+export interface SearchOptions<Repo extends SearchRepo = SearchRepo> {
   /** The compiled query. */
   plan: SearchPlan
   /** The repositories to search. */
-  repos: readonly SearchRepo[]
-  /** Says whether a repository qualifier such as `repo:` or `is:fork` holds for a repository. */
-  holds: (repo: SearchRepo, filter: FilterLeaf) => boolean
+  repos: readonly Repo[]
+  /**
+   * Says whether a repository qualifier such as `repo:` or `is:fork` holds
+   * for a repository; {@linkcode repoHolds} decides them for archived ones.
+   */
+  holds: (repo: Repo, filter: FilterLeaf) => boolean
   /** Most `file` events to emit. Defaults to `100`. */
   limit?: number
   /** Context lines around each match, as git's `-C`. Defaults to `0`. */

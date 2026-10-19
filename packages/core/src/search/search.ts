@@ -155,7 +155,9 @@ function count(record: Record<string, number>, key: string): void {
  * }
  * ```
  */
-export async function* search(options: SearchOptions): AsyncGenerator<SearchEvent, void, undefined> {
+export async function* search<Repo extends SearchRepo>(
+  options: SearchOptions<Repo>,
+): AsyncGenerator<SearchEvent, void, undefined> {
   const { plan, repos, holds, context = 0, maxMatchesPerFile = 20 } = options
   const limit = Math.max(0, options.limit ?? 100)
   const concurrency = Math.max(1, options.concurrency ?? 4)
@@ -178,7 +180,7 @@ export async function* search(options: SearchOptions): AsyncGenerator<SearchEven
   let reserved = 0
   let emitted = 0
 
-  const searchRepo = async (repo: SearchRepo): Promise<void> => {
+  const searchRepo = async (repo: Repo): Promise<void> => {
     const expr = specializePlan(plan.expr, filter => holds(repo, filter))
     if (expr.op === 'none') return
     const ref = repo.ref ?? 'HEAD'
