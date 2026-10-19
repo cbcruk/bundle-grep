@@ -54,6 +54,21 @@ pnpm docs:check
 pnpm test
 ```
 
+The search window's UI is a Vite + React app in `apps/desktop/www`. Build it
+into one HTML file before running `bundle-grep ui` or compiling a binary, or
+work on it with the dev server:
+
+```sh
+pnpm build:ui                                          # apps/desktop/www/dist/index.html
+bun build --compile packages/cli/src/main.ts --outfile bundle-grep
+
+pnpm dev:ui                                            # Vite on 127.0.0.1:5173
+bun packages/cli/src/main.ts ui --dev-server http://127.0.0.1:5173
+```
+
+In the window, `/` focuses the search box, `j`/`k` move between results,
+`Enter` opens one, and `Esc` goes back.
+
 ## Packages
 
 | Package | Purpose |

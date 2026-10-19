@@ -1,0 +1,107 @@
+.repos-view {
+  max-width: 960px;
+}
+
+.repos-view-header {
+  display: flex;
+  align-items: baseline;
+  gap: 16px;
+}
+
+.repos-view-header h1 {
+  margin: 0 0 16px;
+  font-size: 20px;
+}
+
+.repos-view-sync {
+  display: grid;
+  gap: 6px;
+  margin-bottom: 16px;
+}
+
+.repos-view-sync label {
+  font-weight: 600;
+}
+
+.repos-view-sync textarea {
+  font: var(--mono);
+  color: var(--fg);
+  background: var(--canvas-inset);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 6px 8px;
+  resize: vertical;
+}
+
+.repos-view-actions {
+  display: flex;
+  gap: 8px;
+}
+
+.repos-view-outcome {
+  margin: 0 0 16px;
+  padding: 8px 12px 8px 28px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+}
+
+.repos-view-outcome .danger {
+  color: var(--danger-fg);
+}
+
+.repos-view-table {
+  width: 100%;
+  border-collapse: collapse;
+  margin-bottom: 24px;
+}
+
+.repos-view-table th,
+.repos-view-table td {
+  padding: 8px;
+  text-align: left;
+  vertical-align: top;
+  border-bottom: 1px solid var(--border);
+}
+
+.repos-view-table th {
+  font-size: 12px;
+  color: var(--fg-muted);
+}
+
+.repos-view-table a {
+  color: var(--accent);
+  font-weight: 600;
+  text-decoration: none;
+}
+
+.state {
+  display: inline-block;
+  padding: 0 8px;
+  font-size: 12px;
+  border-radius: 999px;
+  border: 1px solid var(--border);
+}
+
+.state.ready {
+  color: var(--success-fg);
+  border-color: var(--success-fg);
+}
+
+.state.unrestored {
+  color: var(--attention-fg);
+  border-color: var(--attention-fg);
+}
+
+.repos-view-settings {
+  display: grid;
+  grid-template-columns: max-content 1fr;
+  gap: 4px 16px;
+  font-size: 12px;
+  color: var(--fg-muted);
+}
+
+.repos-view-settings dd {
+  margin: 0;
+  font: var(--mono);
+  font-size: 12px;
+}

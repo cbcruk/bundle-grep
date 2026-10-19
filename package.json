@@ -7,10 +7,12 @@
     "bun": ">=1.3.12"
   },
   "scripts": {
-    "typecheck": "tsc --noEmit",
+    "typecheck": "tsc --noEmit && tsc --noEmit -p apps/desktop/www",
     "lint": "oxlint",
     "docs:check": "bun scripts/doccheck.ts",
-    "test": "bun test"
+    "test": "bun test",
+    "dev:ui": "pnpm --filter @bundle-grep/desktop dev",
+    "build:ui": "pnpm --filter @bundle-grep/desktop build"
   },
   "devDependencies": {
     "@types/bun": "^1.4.3",

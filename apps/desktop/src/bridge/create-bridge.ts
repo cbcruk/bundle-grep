@@ -5,6 +5,7 @@
  */
 
 import {
+  languageNames,
   listArchive,
   loadArchivedRepos,
   readMetadata,
@@ -129,5 +130,7 @@ export function createBridge(options: BridgeOptions): Bridge {
       }),
 
     bundleGrepSettings: async () => ok({ root: options.root, archiveDir: layout.archiveDir, cacheDir: layout.cacheDir }),
+
+    bundleGrepLanguages: async () => ok(languageNames()),
   }
 }

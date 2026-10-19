@@ -13,6 +13,7 @@
     "noUncheckedIndexedAccess": true,
     "skipLibCheck": true,
     "noEmit": true,
+    "allowImportingTsExtensions": true,
     "resolveJsonModule": true
   },
   "include": [
@@ -20,6 +21,7 @@
     "packages/*/test",
     "apps/*/src",
     "apps/*/test",
+    "apps/*/www/*.ts",
     "scripts"
   ]
 }

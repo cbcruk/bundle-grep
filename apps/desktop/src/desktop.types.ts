@@ -4,8 +4,10 @@
  * @module
  */
 
-import type { ArchiveLayout, RepoMetadata, Span, SyncStatus, RestoreStatus } from '@bundle-grep/core'
+import type { ArchiveLayout, RepoMetadata, RestoreStatus, SearchEvent, Span, SyncStatus } from '@bundle-grep/core'
 import type { EvaluateError, LaunchError, LaunchOptions, LoadError, WindowError } from 'barlo'
+
+import type { UiNotBuiltError } from './desktop.errors'
 
 /** Options for {@linkcode createApi}. */
 export interface ApiOptions {
@@ -37,7 +39,7 @@ export interface BridgeOptions {
 }
 
 /** Why the window could not be opened. */
-export type OpenAppError = LaunchError | EvaluateError | WindowError | LoadError
+export type OpenAppError = LaunchError | EvaluateError | WindowError | LoadError | UiNotBuiltError
 
 /** Options for {@linkcode openApp}. */
 export interface OpenAppOptions extends BridgeOptions {
@@ -46,6 +48,17 @@ export interface OpenAppOptions extends BridgeOptions {
   /** Passed to barlo's `launch`. */
   launch?: LaunchOptions
 }
+
+/** Where {@linkcode openApp} gets the UI: a dev server to proxy, or the embedded page. */
+export type UiSource =
+  | {
+      /** The dev server's origin. */
+      origin: string
+    }
+  | {
+      /** The built UI, as one self-contained HTML file. */
+      page: string
+    }
 
 /** A failure as the page sees it: the error's tag and message, plus a span for query errors. */
 export interface WireError {
@@ -91,6 +104,41 @@ export interface RepoRow {
   /** What was recorded when it was synced, or `null` for a bundle without metadata. */
   metadata: RepoMetadata | null
 }
+
+/** The first line of a search stream: what is being searched. */
+export interface ArchiveSummary {
+  /** Discriminant. */
+  type: 'archive'
+  /** How many repositories are being searched. */
+  repos: number
+  /** `owner/name` of repositories that need `restore` before they can be searched. */
+  unrestored: string[]
+  /** Messages for archive entries that could not be read. */
+  invalid: string[]
+}
+
+/**
+ * One line of the `GET /api/search` stream.
+ *
+ * The core's search events, with a `repo-error`'s error reduced to a
+ * {@linkcode WireError}, between an {@linkcode ArchiveSummary} and `done`.
+ * A `heartbeat` carries nothing; it only keeps the connection open.
+ */
+export type SearchStreamEvent =
+  | ArchiveSummary
+  | Exclude<SearchEvent, { type: 'repo-error' }>
+  | {
+      /** A repository that failed; the others carry on. */
+      type: 'repo-error'
+      /** `owner/name`. */
+      repo: string
+      /** What went wrong. */
+      error: WireError
+    }
+  | {
+      /** Nothing happened for a while. */
+      type: 'heartbeat'
+    }
 
 /** What `listRepos` resolves to. */
 export interface RepoList {
@@ -166,4 +214,6 @@ export interface Bridge {
   bundleGrepRestore: () => Promise<BridgeResult<RestoreItem[]>>
   /** Reports where the archive lives. */
   bundleGrepSettings: () => Promise<BridgeResult<Settings>>
+  /** Lists the names `language:` accepts, popular ones first. */
+  bundleGrepLanguages: () => Promise<BridgeResult<string[]>>
 }

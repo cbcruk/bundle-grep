@@ -41,3 +41,9 @@ jobs:
 
       - name: Test
         run: pnpm test
+
+      - name: Build UI
+        run: pnpm build:ui
+
+      - name: Compile
+        run: bun build --compile packages/cli/src/main.ts --outfile bundle-grep

@@ -17,7 +17,7 @@ import {
 } from '@bundle-grep/core'
 import { Result } from 'better-result'
 
-import type { SearchRouteOptions } from '../desktop.types'
+import type { ArchiveSummary, SearchRouteOptions, SearchStreamEvent } from '../desktop.types'
 import { toWireError } from '../wire-error'
 import { errorResponse } from './respond'
 
@@ -28,7 +28,7 @@ import { errorResponse } from './respond'
  */
 const DEFAULT_HEARTBEAT_MS = 5000
 
-const HEARTBEAT = `${JSON.stringify({ type: 'heartbeat' })}\n`
+const HEARTBEAT = lineOf({ type: 'heartbeat' })
 
 const MAX_LIMIT = 1000
 
@@ -43,9 +43,12 @@ function wholeNumber(params: URLSearchParams, name: string, fallback: number, ma
   return Result.ok(Number(raw))
 }
 
-function lineOf(event: SearchEvent): string {
-  const shown = event.type === 'repo-error' ? { ...event, error: toWireError(event.error) } : event
-  return `${JSON.stringify(shown)}\n`
+function lineOf(event: SearchStreamEvent): string {
+  return `${JSON.stringify(event)}\n`
+}
+
+function wireEvent(event: SearchEvent): SearchStreamEvent {
+  return event.type === 'repo-error' ? { ...event, error: toWireError(event.error) } : event
 }
 
 /**
@@ -93,7 +96,7 @@ export async function searchRoute(request: Request, options: SearchRouteOptions)
   const signal = AbortSignal.any([request.signal, stop.signal])
   const events = search({ plan, repos, holds: repoHolds, ...numbers.value, signal })
   const encoder = new TextEncoder()
-  const archive = {
+  const archive: ArchiveSummary = {
     type: 'archive',
     repos: repos.length,
     unrestored: unrestored.map(entry => `${entry.owner}/${entry.name}`),
@@ -106,7 +109,7 @@ export async function searchRoute(request: Request, options: SearchRouteOptions)
     async pull(controller): Promise<void> {
       if (!started) {
         started = true
-        controller.enqueue(encoder.encode(`${JSON.stringify(archive)}\n`))
+        controller.enqueue(encoder.encode(lineOf(archive)))
         return
       }
       pending ??= events.next()
@@ -120,7 +123,7 @@ export async function searchRoute(request: Request, options: SearchRouteOptions)
       }
       pending = undefined
       if (next.done) controller.close()
-      else controller.enqueue(encoder.encode(lineOf(next.value)))
+      else controller.enqueue(encoder.encode(lineOf(wireEvent(next.value))))
     },
     async cancel(): Promise<void> {
       stop.abort()
