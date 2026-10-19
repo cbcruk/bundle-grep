@@ -1,5 +1,5 @@
 import { afterAll, beforeAll, describe, expect, test } from 'bun:test'
-import { mkdirSync, readFileSync, statSync, writeFileSync } from 'node:fs'
+import { existsSync, mkdirSync, readFileSync, statSync, utimesSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 
 import { readMetadata, syncRepo, syncRepos } from '../../src'
@@ -176,9 +176,17 @@ describe('syncRepo', () => {
     writeFileSync(`${first.paths.bundle}.tmp`, '')
     writeFileSync(`${first.paths.bundle}.lock`, '')
 
+    const abandoned = `${first.paths.bundle}.0000.tmp`
+    writeFileSync(abandoned, '')
+    const recent = `${first.paths.bundle}.1111.tmp`
+    writeFileSync(recent, '')
+    utimesSync(abandoned, new Date(Date.now() - 2 * 60 * 60 * 1000), new Date(Date.now() - 2 * 60 * 60 * 1000))
+
     fixture.git('commit', '--quiet', '--allow-empty', '--message', 'more')
 
     expect((await syncRepo(target, options)).unwrap().status).toBe('updated')
+    expect(existsSync(abandoned)).toBe(false)
+    expect(existsSync(recent)).toBe(true)
   })
 
   test('leaves credentials in the URL out of the metadata', async () => {

@@ -7,8 +7,8 @@
 import { Result } from 'better-result'
 import { createHash, randomUUID } from 'node:crypto'
 import { existsSync } from 'node:fs'
-import { mkdir, rename, rm, stat } from 'node:fs/promises'
-import { dirname } from 'node:path'
+import { mkdir, readdir, rename, rm, stat } from 'node:fs/promises'
+import { basename, dirname, join } from 'node:path'
 
 import { FileSystemError } from '../archive/archive.errors'
 import { archivePaths } from '../archive/archive-paths'
@@ -21,6 +21,9 @@ import type { SyncError, SyncEvent, SyncOptions, SyncOutcome, SyncStatus, SyncTa
 
 // The empty value clears the user's helpers for github.com, as `gh auth
 // setup-git` does, so gh's token is neither shadowed by nor stored into them.
+/** How old a leftover temporary bundle must be before it counts as abandoned. */
+const ABANDONED_AFTER_MS = 60 * 60 * 1000
+
 const GITHUB_CREDENTIALS = [
   '-c',
   'credential.https://github.com.helper=',
@@ -74,9 +77,11 @@ function withoutCredentials(url: string): string {
  * in the existing metadata, or when the bundle on disk no longer holds those
  * refs or has changed size. It is written to a file of its own beside its
  * destination, checked with `git bundle verify`, and renamed into place, so an
- * interrupted sync leaves the previous bundle intact. `verify` reads only the
- * header and checks prerequisites; it does not prove the pack data is intact. The metadata is rewritten on every sync,
- * so fork and archived flags stay current even when the code has not changed.
+ * interrupted sync leaves the previous bundle intact; temporary files an
+ * interrupted sync left behind are removed once they are an hour old.
+ * `verify` reads only the header and checks prerequisites; it does not prove
+ * the pack data is intact. The metadata is rewritten on every sync, so fork
+ * and archived flags stay current even when the code has not changed.
  *
  * For `https://github.com/` URLs, git can fall back to `gh` for credentials,
  * replacing the user's own helpers for github.com, so private repositories
@@ -131,7 +136,9 @@ export function syncRepo(target: SyncTarget, options: SyncOptions): Promise<Resu
     const refsDigest = createHash('sha256').update(refs).update(`HEAD ${symref}\n`).digest('hex')
 
     const previous = (await readMetadata(paths.metadata)).unwrapOr(undefined)
-    const existingSize = existsSync(paths.bundle) ? (await stat(paths.bundle)).size : undefined
+    const existingSize = existsSync(paths.bundle)
+      ? (yield* Result.await(fileSystem(paths.bundle, () => stat(paths.bundle)))).size
+      : undefined
     const status: SyncStatus =
       refs.length === 0
         ? 'empty'
@@ -187,6 +194,17 @@ async function bundleHolds(
   return listed.sort().join('\n') === expected.sort().join('\n')
 }
 
+async function removeAbandoned(bundle: string): Promise<void> {
+  const prefix = `${basename(bundle)}.`
+  const cutoff = Date.now() - ABANDONED_AFTER_MS
+  for (const entry of await readdir(dirname(bundle))) {
+    if (!entry.startsWith(prefix) || !/\.tmp(\.lock)?$/.test(entry)) continue
+    const path = join(dirname(bundle), entry)
+    const { mtimeMs } = await stat(path).catch(() => ({ mtimeMs: Infinity }))
+    if (mtimeMs < cutoff) await rm(path, { force: true })
+  }
+}
+
 async function writeBundle(
   paths: ArchivePaths,
   git: (args: string[]) => Promise<Result<GitOutput, GitError>>,
@@ -196,6 +214,7 @@ async function writeBundle(
   const temporary = `${paths.bundle}.${randomUUID()}.tmp`
   const written = await Result.gen(async function* () {
     yield* Result.await(fileSystem(paths.bundle, () => mkdir(dirname(paths.bundle), { recursive: true })))
+    yield* Result.await(fileSystem(paths.bundle, () => removeAbandoned(paths.bundle)))
     yield* Result.await(git(['bundle', 'create', '--quiet', temporary, '--all']))
     yield* Result.await(git(['bundle', 'verify', '--quiet', temporary]))
     const { size } = yield* Result.await(fileSystem(temporary, () => stat(temporary)))
