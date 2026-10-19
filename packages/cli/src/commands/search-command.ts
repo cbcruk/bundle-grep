@@ -66,6 +66,7 @@ async function run(args: string[], io: Io): Promise<number> {
   const { tree, plan } = compiled.value
   const checked = await validateRegexes(tree, { signal: io.signal })
   if (checked.isErr()) {
+    if (io.signal?.aborted) return EXIT.error
     const { error } = checked
     const message = error instanceof QueryCompileError ? formatQueryError(query, error, errors) : formatNotice('error', error.message, errors)
     io.error(message)

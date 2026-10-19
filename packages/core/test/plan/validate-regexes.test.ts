@@ -1,4 +1,7 @@
 import { describe, expect, test } from 'bun:test'
+import { mkdtempSync, rmSync, writeFileSync } from 'node:fs'
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
 
 import { GitError } from '../../src/git/git.errors'
 import { QueryCompileError } from '../../src/plan/plan.errors'
@@ -52,5 +55,32 @@ describe('validateRegexes', () => {
   test('an aborted signal is a GitError, not a query error', async () => {
     const result = await validateRegexes(parseQuery('/[/').unwrap(), { signal: AbortSignal.abort() })
     expect(result.isErr() && result.error).toBeInstanceOf(GitError)
+  })
+
+  test('a git failure that is not about the pattern stays a GitError', async () => {
+    const root = mkdtempSync(join(tmpdir(), 'bundle-grep-config-'))
+    const saved = process.env.GIT_CONFIG_GLOBAL
+    try {
+      writeFileSync(join(root, 'config'), '[broken\n')
+      process.env.GIT_CONFIG_GLOBAL = join(root, 'config')
+      const result = await validateRegexes(parseQuery('/ok/').unwrap())
+      expect(result.isErr() && result.error).toBeInstanceOf(GitError)
+    } finally {
+      if (saved === undefined) delete process.env.GIT_CONFIG_GLOBAL
+      else process.env.GIT_CONFIG_GLOBAL = saved
+      rmSync(root, { recursive: true, force: true })
+    }
+  })
+
+  test('a TMPDIR that does not exist falls back to the working directory', async () => {
+    const saved = process.env.TMPDIR
+    try {
+      process.env.TMPDIR = join(tmpdir(), 'bundle-grep-no-such-dir')
+      expect(await check('/ok/')).toBe('ok')
+      expect(await check('/[/')).toMatchObject({ offset: 0, length: 3 })
+    } finally {
+      if (saved === undefined) delete process.env.TMPDIR
+      else process.env.TMPDIR = saved
+    }
   })
 })
