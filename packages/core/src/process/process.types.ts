@@ -1,0 +1,37 @@
+/**
+ * Types for running child processes.
+ *
+ * @module
+ */
+
+/** Options for {@linkcode runProcess}. */
+export interface RunProcessOptions {
+  /** The directory to run in. */
+  cwd?: string
+  /** Variables to set on top of the current environment. */
+  env?: Record<string, string>
+  /** Exit statuses that count as success, besides `0`. */
+  allowExitCodes?: readonly number[]
+  /** Kills the process when aborted; the run then fails. */
+  signal?: AbortSignal
+}
+
+/** What a process that exited with an accepted status produced. */
+export interface ProcessOutput {
+  /** Everything the process wrote to stdout. */
+  stdout: Buffer
+  /** The exit status, `0` or one of {@linkcode RunProcessOptions.allowExitCodes}. */
+  exitCode: number
+}
+
+/** Why a process run failed. */
+export interface ProcessFailure {
+  /** The exit status, or `null` when the process never started or was killed by a signal. */
+  exitCode: number | null
+  /** What the process wrote to stderr, trimmed. */
+  stderr: string
+  /** Whether the process started; when not, {@linkcode ProcessFailure.reason} says why. */
+  started: boolean
+  /** Human-readable summary, without the command's name, such as `failed with exit code 1: …`. */
+  reason: string
+}
