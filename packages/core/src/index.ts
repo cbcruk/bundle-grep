@@ -18,7 +18,7 @@ export { GhError } from './github/github.errors'
 export { listGithubRepos, viewGithubRepo } from './github/github-repos'
 export type { GithubOptions, ListGithubReposOptions } from './github/github.types'
 export { compileQuery } from './plan/compile-query'
-export { languageOf } from './plan/languages'
+export { languageNames, languageOf } from './plan/languages'
 export { listMatchingFiles } from './plan/list-matching-files'
 export { QueryCompileError } from './plan/plan.errors'
 export type {

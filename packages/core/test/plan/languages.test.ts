@@ -1,6 +1,6 @@
 import { describe, expect, test } from 'bun:test'
 
-import { findLanguage, languageOf } from '../../src/plan/languages'
+import { findLanguage, languageNames, languageOf } from '../../src/plan/languages'
 
 describe('languageOf', () => {
   test.each([
@@ -59,5 +59,17 @@ describe('pinned extensions', () => {
     for (const [extension, language] of Object.entries(pinned)) {
       expect(findLanguage(language)?.extensions.map(e => e.toLowerCase())).toContain(extension)
     }
+  })
+})
+
+describe('languageNames', () => {
+  test('lists popular languages first, then the rest alphabetically, each once', () => {
+    const names = languageNames()
+    expect(names.slice(0, 3)).toEqual(['C', 'C#', 'C++'])
+    expect(names.indexOf('TypeScript')).toBeLessThan(names.indexOf('Ada'))
+    expect(new Set(names).size).toBe(names.length)
+    const rest = names.slice(names.indexOf('TypeScript') + 1)
+    expect(rest).toEqual(rest.toSorted((a, b) => a.localeCompare(b, 'en', { sensitivity: 'base' })))
+    expect(names.every(name => findLanguage(name)?.name === name)).toBe(true)
   })
 })

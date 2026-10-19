@@ -117,3 +117,15 @@ export function languageOf(path: string): string | undefined {
 export function findLanguage(name: string): Language | undefined {
   return byName.get(normalize(name))
 }
+
+/**
+ * Lists every language name `language:` accepts, for suggesting values.
+ *
+ * @returns The canonical names, popular languages first and the rest in alphabetical order.
+ */
+export function languageNames(): string[] {
+  const rest = Object.keys(data.languages)
+    .filter(name => !popular.has(name))
+    .toSorted((a, b) => a.localeCompare(b, 'en', { sensitivity: 'base' }))
+  return [...data.popular, ...rest]
+}
