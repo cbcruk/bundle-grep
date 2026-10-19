@@ -4,19 +4,15 @@
  * @module
  */
 
-import { listGithubRepos, syncRepos, targetFromUrl, viewGithubRepo, type SyncTarget } from '@bundle-grep/core'
-import { Result } from 'better-result'
-import { resolve } from 'node:path'
+import { resolveSyncSource, syncRepos, type SyncTarget } from '@bundle-grep/core'
 
 import { parseCommandArgs, wholeNumber } from '../args'
 import type { Command, Io } from '../cli.types'
 import { EXIT } from '../exit-codes'
-import { expandHome } from '../expand-home'
 import { stylesFor } from '../format/ansi'
 import { formatFailure, formatNotice, formatStatus } from '../format/status-line'
 import { layoutFor } from '../layout'
 import { batchSshEnv, hasSshCommandConfig } from '../ssh-env'
-import type { Resolved, TargetError } from './commands.types'
 
 const USAGE = `Usage: bundle-grep sync <source>... [options]
 
@@ -34,37 +30,6 @@ Options:
   --json           print one JSON object per source or repository
   -h, --help       show this help
 `
-
-const LOCAL_PATH = /^(?:\.{1,2}(?:\/|$)|\/|~(?:\/|$))/
-const URL_LIKE = /^[a-z][a-z0-9+.-]*:\/\/|^[^/\s]+:/i
-const GITHUB = /^(?:https:\/\/github\.com\/|git@github\.com:|ssh:\/\/git@github\.com\/)/i
-
-/**
- * Turns one source argument into sync targets.
- *
- * A GitHub URL is looked up with `gh` so that `is:fork` and `is:archived`
- * work, but keeps the URL as given, so an SSH URL is still fetched over SSH;
- * when `gh` cannot help, the repository is synced anyway with a warning.
- * Local paths are made absolute, as git runs them from the cache directory.
- */
-export async function targetsFor(source: string, io: Io, limit: number): Promise<Result<Resolved, TargetError>> {
-  const options = { gh: io.gh, signal: io.signal }
-  const one = (target: SyncTarget, warning?: string): Resolved => ({ targets: [target], ...(warning ? { warning } : {}) })
-
-  if (URL_LIKE.test(source)) {
-    const parsed = targetFromUrl(source)
-    if (parsed.isErr() || !GITHUB.test(parsed.value.url)) return parsed.map(target => one(target))
-    const target = parsed.value
-    const viewed = await viewGithubRepo(`${target.owner}/${target.name}`, options)
-    if (viewed.isOk()) return Result.ok(one({ ...viewed.value, url: target.url }))
-    return Result.ok(one(target, `could not look ${target.owner}/${target.name} up with gh, so whether it is a fork or archived is unknown: ${viewed.error.message}`))
-  }
-  if (LOCAL_PATH.test(source)) {
-    return targetFromUrl(resolve(expandHome(source))).map(target => one(target))
-  }
-  if (source.includes('/')) return (await viewGithubRepo(source, options)).map(target => one(target))
-  return (await listGithubRepos(source, { ...options, limit })).map(targets => ({ targets }))
-}
 
 async function run(args: string[], io: Io): Promise<number> {
   const styles = stylesFor(io.color)
@@ -89,7 +54,7 @@ async function run(args: string[], io: Io): Promise<number> {
   let failed = false
   const targets = new Map<string, SyncTarget>()
   for (const source of positionals) {
-    const found = await targetsFor(source, io, limit)
+    const found = await resolveSyncSource(source, { gh: io.gh, signal: io.signal, limit })
     if (found.isErr()) {
       failed = true
       if (values.json) io.write(`${JSON.stringify({ type: 'failed', source, error: found.error.message })}\n`)
