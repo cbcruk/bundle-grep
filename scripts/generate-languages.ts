@@ -3,7 +3,8 @@
  * Linguist's `languages.yml`.
  *
  * Only what `language:` needs is kept: each language's aliases, extensions,
- * and exact filenames. Run with `bun scripts/generate-languages.ts [ref]`,
+ * and exact filenames, plus `popular.yml`'s list, which breaks ties between
+ * languages sharing an extension. Run with `bun scripts/generate-languages.ts [ref]`,
  * where `ref` is a Linguist tag or commit and defaults to `main`.
  *
  * @module
@@ -18,15 +19,20 @@ interface LinguistLanguage {
 }
 
 const ref = process.argv[2] ?? 'main'
-const source = `https://raw.githubusercontent.com/github-linguist/linguist/${ref}/lib/linguist/languages.yml`
+const base = `https://raw.githubusercontent.com/github-linguist/linguist/${ref}/lib/linguist`
+const source = `${base}/languages.yml`
 
-const response = await fetch(source)
-if (!response.ok) {
-  console.error(`Could not fetch ${source}: ${response.status}`)
-  process.exit(1)
+async function fetchYaml(url: string): Promise<unknown> {
+  const response = await fetch(url)
+  if (!response.ok) {
+    console.error(`Could not fetch ${url}: ${response.status}`)
+    process.exit(1)
+  }
+  return Bun.YAML.parse(await response.text())
 }
 
-const parsed = Bun.YAML.parse(await response.text()) as Record<string, LinguistLanguage>
+const parsed = (await fetchYaml(source)) as Record<string, LinguistLanguage>
+const popular = (await fetchYaml(`${base}/popular.yml`)) as string[]
 const languages = Object.fromEntries(
   Object.entries(parsed)
     .filter(([, language]) => language.extensions?.length || language.filenames?.length)
@@ -41,5 +47,5 @@ const languages = Object.fromEntries(
 )
 
 const target = join(import.meta.dir, '..', 'packages/core/src/plan/languages.generated.json')
-await Bun.write(target, `${JSON.stringify({ source, languages }, null, 1)}\n`)
+await Bun.write(target, `${JSON.stringify({ source, popular, languages }, null, 1)}\n`)
 console.log(`${Object.keys(languages).length} languages written to ${target}`)

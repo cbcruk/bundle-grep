@@ -15,6 +15,8 @@ export interface RunGitOptions {
    * than a failure.
    */
   allowExitCodes?: readonly number[]
+  /** Kills git when aborted; the run then fails with a {@linkcode GitError}. */
+  signal?: AbortSignal
 }
 
 /** What a successful git run produced. */

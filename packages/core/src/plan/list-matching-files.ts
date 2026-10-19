@@ -62,10 +62,10 @@ function stripRef(paths: string[], ref: string): string[] {
  * Binary files are left out of the universe, as GitHub does not index them,
  * so they match nothing — not even a `NOT` or a `path:`.
  */
-async function listTextFiles(gitDir: string, ref: string): Promise<FileSet> {
+async function listTextFiles(gitDir: string, ref: string, signal: AbortSignal | undefined): Promise<FileSet> {
   const [nonEmpty, tree] = await Promise.all([
-    runGit(['grep', '--no-color', '-I', '-l', '-z', '-e', '', ref], { cwd: gitDir, allowExitCodes: [1] }),
-    runGit(['ls-tree', '-r', '-l', '-z', ref], { cwd: gitDir }),
+    runGit(['grep', '--no-color', '-I', '-l', '-z', '-e', '', ref], { cwd: gitDir, allowExitCodes: [1], signal }),
+    runGit(['ls-tree', '-r', '-l', '-z', ref], { cwd: gitDir, signal }),
   ])
   if (nonEmpty.isErr()) return nonEmpty
   if (tree.isErr()) return tree
@@ -87,12 +87,12 @@ async function listTextFiles(gitDir: string, ref: string): Promise<FileSet> {
  * @returns The matching paths, sorted, or the first git failure.
  */
 export async function listMatchingFiles(options: ListMatchingFilesOptions): Promise<Result<string[], GitError>> {
-  const { gitDir, expr, ref = 'HEAD' } = options
+  const { gitDir, expr, ref = 'HEAD', signal } = options
   const pathspecs = narrowingPathspecs(expr)
   let universe: Promise<FileSet> | undefined
 
   const allFiles = (): Promise<FileSet> => {
-    universe ??= listTextFiles(gitDir, ref)
+    universe ??= listTextFiles(gitDir, ref, signal)
     return universe
   }
 
@@ -113,7 +113,7 @@ export async function listMatchingFiles(options: ListMatchingFilesOptions): Prom
         return filterAll(path => matchesLanguage(node, path))
       case 'grep': {
         const args = ['grep', '--no-color', '-l', '-z', '-I', ...grepArgs(node), ref, '--', ...pathspecs]
-        const result = await runGit(args, { cwd: gitDir, allowExitCodes: [1] })
+        const result = await runGit(args, { cwd: gitDir, allowExitCodes: [1], signal })
         return result.map(({ stdout }) => new Set(stripRef(splitNul(stdout), ref)))
       }
       case 'not': {

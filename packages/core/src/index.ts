@@ -7,6 +7,7 @@
 
 export { GitError } from './git/git.errors'
 export { compileQuery } from './plan/compile-query'
+export { languageOf } from './plan/languages'
 export { listMatchingFiles } from './plan/list-matching-files'
 export { QueryCompileError } from './plan/plan.errors'
 export type {
@@ -26,6 +27,17 @@ export type {
 } from './plan/plan.types'
 export { specializePlan } from './plan/specialize-plan'
 export { parseQuery } from './query/parse-query'
+export { PcreUnavailableError } from './search/search.errors'
+export { search, toSearchRepoError } from './search/search'
+export type {
+  MatchRange,
+  SearchEvent,
+  SearchFacets,
+  SearchLine,
+  SearchOptions,
+  SearchRepo,
+  SearchRepoError,
+} from './search/search.types'
 export { QueryParseError } from './query/query.errors'
 export type {
   AndNode,
