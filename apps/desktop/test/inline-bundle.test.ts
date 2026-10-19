@@ -29,3 +29,21 @@ test('the build is one HTML file, and inlined code cannot end its element early'
   expect(html).toContain('<\\/script><b>')
   expect(html).toContain('<\\/style>')
 })
+
+async function buildFails(files: Record<string, string>): Promise<string> {
+  const dir = mkdtempSync(join(root, 'case-'))
+  writeFileSync(join(dir, 'index.html'), '<!doctype html><html><body><script type="module" src="/main.js"></script></body></html>')
+  for (const [name, text] of Object.entries(files)) writeFileSync(join(dir, name), text)
+  return build({ root: dir, logLevel: 'silent', configFile: false, plugins: [inlineBundle()], build: { outDir: 'dist' } }).then(
+    () => 'built',
+    (error: Error) => error.message,
+  )
+}
+
+test('code with "<!--" fails the build rather than being inlined', async () => {
+  expect(await buildFails({ 'main.js': 'console.log("<!--")\n' })).toContain('<!--')
+})
+
+test('a chunk that cannot be inlined fails the build rather than being left out', async () => {
+  expect(await buildFails({ 'main.js': 'import("./later.js")\n', 'later.js': 'console.log(1)\n' })).toContain('not inlined')
+})

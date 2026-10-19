@@ -1,18 +1,15 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 
 import { navigate } from '../../hooks/use-route'
-import { isTyping } from '../../lib/keyboard'
+import { isPageKey } from '../../lib/keyboard'
 import { groupByRepo } from '../../lib/group'
 import { toggleFacet } from '../../lib/query-edit'
 import { FileResult } from '../file-result/file-result'
 import { Link } from '../link/link'
 import { QueryError } from '../query-error/query-error'
 import type { ResultsProps } from './results.types'
+import { plural } from './results.utils'
 import './results.css'
-
-function plural(count: number, one: string, many = `${one}s`): string {
-  return `${count.toLocaleString('en')} ${count === 1 ? one : many}`
-}
 
 /**
  * The results column: a summary, archive warnings, failures, and the
@@ -27,11 +24,11 @@ export function Results({ query, search, limit, maxLimit, onShowMore }: ResultsP
   const groups = useMemo(() => groupByRepo(files), [files])
   const ordered = useMemo(() => groups.flatMap(group => group.files), [groups])
 
-  useEffect(() => setSelected(-1), [query])
+  useEffect(() => setSelected(-1), [query, limit])
 
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent): void => {
-      if (isTyping(event) || ordered.length === 0) return
+      if (!isPageKey(event) || ordered.length === 0) return
       if (event.key === 'j' || event.key === 'ArrowDown') {
         event.preventDefault()
         setSelected(index => Math.min(index + 1, ordered.length - 1))

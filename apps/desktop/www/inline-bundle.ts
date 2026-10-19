@@ -17,7 +17,10 @@ function escapeRegex(text: string): string {
  *
  * A `</script` or `</style` inside the inlined code would end its element
  * early, so it is escaped; `<\/` means the same in JavaScript strings and
- * CSS. The build fails if the HTML still points at a file afterwards.
+ * CSS. A `<!--` in a script changes how the HTML parser finds its end, and
+ * has no escape that is safe everywhere in JavaScript, so it fails the
+ * build. So does anything left over — a file the HTML still points at, or a
+ * chunk or asset that was not inlined — since only the HTML is embedded.
  */
 export function inlineBundle(): Plugin {
   return {
@@ -33,6 +36,7 @@ export function inlineBundle(): Plugin {
           if (output.type === 'chunk') {
             const tag = new RegExp(`<script\\b[^>]*\\bsrc=${reference}[^>]*></script>`)
             if (!tag.test(source)) continue
+            if (output.code.includes('<!--')) this.error(`${fileName} contains "<!--", which cannot be inlined safely`)
             const code = output.code.replace(/<\/script/gi, '<\\/script')
             source = source.replace(tag, () => `<script type="module">${code}</script>`)
             delete bundle[fileName]
@@ -48,6 +52,8 @@ export function inlineBundle(): Plugin {
         if (left) this.error(`${html.fileName} still references a file after inlining: ${left[0]}`)
         html.source = source
       }
+      const left = Object.keys(bundle).filter(fileName => !fileName.endsWith('.html'))
+      if (left.length > 0) this.error(`Files were not inlined, so the embedded UI would miss them: ${left.join(', ')}`)
     },
   }
 }

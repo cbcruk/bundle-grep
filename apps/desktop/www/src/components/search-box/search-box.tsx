@@ -12,18 +12,22 @@ import type { SearchBoxProps } from './search-box.types'
  * The query input, with qualifier completion.
  *
  * A query that does not parse is not searched; the box shows what is wrong
- * with it instead.
+ * with it instead. `Tab` takes the highlighted suggestion, or the first;
+ * `Enter` takes one only once the arrow keys or the mouse have picked it, and
+ * searches otherwise, so a word such as `use` can be searched as typed.
  */
 export function SearchBox({ query, sources, onSearch, inputRef }: SearchBoxProps): React.JSX.Element {
   const [value, setValue] = useState(query)
   const [caret, setCaret] = useState(query.length)
   const [open, setOpen] = useState(false)
   const [active, setActive] = useState(0)
+  const [picked, setPicked] = useState(false)
   const [error, setError] = useState<{ query: string; error: WireError }>()
   const pendingCaret = useRef<number | undefined>(undefined)
 
   useEffect(() => {
     setValue(query)
+    setCaret(query.length)
     setError(undefined)
   }, [query])
 
@@ -43,6 +47,7 @@ export function SearchBox({ query, sources, onSearch, inputRef }: SearchBoxProps
     setValue(next.query)
     setCaret(next.caret)
     setActive(0)
+    setPicked(false)
     pendingCaret.current = next.caret
   }
 
@@ -64,12 +69,13 @@ export function SearchBox({ query, sources, onSearch, inputRef }: SearchBoxProps
       else inputRef.current?.blur()
       return
     }
-    if (!showing) return
+    if (!showing || event.nativeEvent.isComposing) return
     if (event.key === 'ArrowDown' || event.key === 'ArrowUp') {
       event.preventDefault()
       const step = event.key === 'ArrowDown' ? 1 : -1
-      setActive(index => (index + step + suggestions.length) % suggestions.length)
-    } else if (event.key === 'Tab' || (event.key === 'Enter' && !event.nativeEvent.isComposing)) {
+      setActive(index => (picked ? (index + step + suggestions.length) % suggestions.length : step > 0 ? 0 : suggestions.length - 1))
+      setPicked(true)
+    } else if (event.key === 'Tab' || (event.key === 'Enter' && picked)) {
       event.preventDefault()
       const chosen = suggestions[Math.min(active, suggestions.length - 1)]
       if (chosen) accept(chosen)
@@ -94,6 +100,7 @@ export function SearchBox({ query, sources, onSearch, inputRef }: SearchBoxProps
           setValue(event.target.value)
           setCaret(event.target.selectionStart ?? event.target.value.length)
           setActive(0)
+          setPicked(false)
           setOpen(true)
         }}
         onSelect={event => setCaret(event.currentTarget.selectionStart ?? 0)}
@@ -107,13 +114,16 @@ export function SearchBox({ query, sources, onSearch, inputRef }: SearchBoxProps
             <li
               key={suggestion.insert}
               role="option"
-              aria-selected={index === active}
-              className={index === active ? 'active' : undefined}
+              aria-selected={picked && index === active}
+              className={picked && index === active ? 'active' : undefined}
               onMouseDown={event => {
                 event.preventDefault()
                 accept(suggestion)
               }}
-              onMouseEnter={() => setActive(index)}
+              onMouseEnter={() => {
+                setActive(index)
+                setPicked(true)
+              }}
             >
               {suggestion.label}
             </li>

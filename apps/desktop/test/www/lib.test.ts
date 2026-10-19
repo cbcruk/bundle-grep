@@ -5,7 +5,7 @@ import type { SearchLine } from '@bundle-grep/core'
 import { blobLines } from '../../www/src/lib/blob-text'
 import { groupByRepo } from '../../www/src/lib/group'
 import { hunks, segments } from '../../www/src/lib/highlight'
-import { isTyping } from '../../www/src/lib/keyboard'
+import { isPageKey, isTyping } from '../../www/src/lib/keyboard'
 import { readNdjson } from '../../www/src/lib/ndjson'
 import { parseRoute, routeSearch } from '../../www/src/lib/route'
 
@@ -135,5 +135,17 @@ describe('isTyping', () => {
     expect(isTyping({ ...key, target: { tagName: 'DIV', isContentEditable: true } as unknown as EventTarget })).toBe(true)
     expect(isTyping({ ...key, metaKey: true, target: null })).toBe(true)
     expect(isTyping({ ...key, target: { tagName: 'BODY' } as unknown as EventTarget })).toBe(false)
+  })
+})
+
+describe('isPageKey', () => {
+  const key = { altKey: false, ctrlKey: false, metaKey: false }
+  test('only a key pressed with nothing focused is a shortcut', () => {
+    expect(isPageKey({ ...key, target: { tagName: 'BODY' } as unknown as EventTarget })).toBe(true)
+    expect(isPageKey({ ...key, target: null })).toBe(true)
+    for (const tagName of ['A', 'BUTTON', 'SUMMARY', 'INPUT']) {
+      expect(isPageKey({ ...key, target: { tagName } as unknown as EventTarget })).toBe(false)
+    }
+    expect(isPageKey({ ...key, ctrlKey: true, target: null })).toBe(false)
   })
 })

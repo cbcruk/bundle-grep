@@ -36,8 +36,16 @@ describe('toggleFacet', () => {
     expect(toggleFacet('x path:/src/**', { kind: 'path', value: 'src' })).toBe('x')
   })
 
-  test('a negated qualifier, or one under an OR, is not the facet, so the facet is added', () => {
-    expect(toggleFacet('x -language:go', { kind: 'language', value: 'Go' })).toBe('x -language:go language:Go')
+  test('adding a facet drops its negation, which would leave nothing to match', () => {
+    expect(toggleFacet('x -language:go', { kind: 'language', value: 'Go' })).toBe('x language:Go')
+    expect(toggleFacet('NOT repo:me/app x', { kind: 'repo', value: 'me/app' })).toBe('x repo:me/app')
+  })
+
+  test('removing a facet removes every copy of it', () => {
+    expect(toggleFacet('foo language:go language:Go', { kind: 'language', value: 'Go' })).toBe('foo')
+  })
+
+  test('a qualifier under an OR is not the facet, so the facet is added', () => {
     expect(toggleFacet('(x language:go) OR y', { kind: 'language', value: 'Go' })).toBe('((x language:go) OR y) language:Go')
   })
 

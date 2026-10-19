@@ -29,11 +29,10 @@ export function App(): React.JSX.Element {
   const route = useRoute()
   const { repos, reload } = useArchive()
   const languages = useLanguages()
-  const [limit, setLimit] = useState(LIMIT)
+  const [expanded, setExpanded] = useState<string>()
+  const limit = expanded === route.q ? MAX_LIMIT : LIMIT
   const search = useSearch(route.q, limit)
   const input = useRef<HTMLInputElement>(null)
-
-  useEffect(() => setLimit(LIMIT), [route.q])
 
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent): void => {
@@ -81,7 +80,7 @@ export function App(): React.JSX.Element {
                 search={search}
                 limit={limit}
                 maxLimit={MAX_LIMIT}
-                onShowMore={() => setLimit(MAX_LIMIT)}
+                onShowMore={() => setExpanded(route.q)}
               />
             </div>
           ))}

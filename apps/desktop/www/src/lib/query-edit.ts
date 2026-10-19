@@ -50,10 +50,23 @@ function matches(node: QueryNode, facet: Facet): boolean {
     : node.value.toLowerCase() === facet.value.toLowerCase()
 }
 
-function findFacet(query: string, facet: Facet): QueryNode | undefined {
+function findFacets(query: string, facet: Facet, negated: boolean): QueryNode[] {
   const parsed = parseQuery(query)
-  if (parsed.isErr()) return undefined
-  return conjuncts(parsed.value).find(node => matches(node, facet))
+  if (parsed.isErr()) return []
+  return conjuncts(parsed.value).filter(node =>
+    negated ? node.type === 'not' && matches(node.child, facet) : matches(node, facet),
+  )
+}
+
+function cut(query: string, nodes: readonly QueryNode[]): string {
+  let out = query
+  for (const node of nodes.toSorted((a, b) => b.span.offset - a.span.offset)) {
+    const before = out.slice(0, node.span.offset).trimEnd()
+    const after = out.slice(node.span.offset + node.span.length).trimStart()
+    const joined = !before || !after || before.endsWith('(') || after.startsWith(')')
+    out = joined ? before + after : `${before} ${after}`
+  }
+  return out
 }
 
 /**
@@ -61,12 +74,13 @@ function findFacet(query: string, facet: Facet): QueryNode | undefined {
  * qualifier, which is when the sidebar shows it as selected.
  */
 export function hasFacet(query: string, facet: Facet): boolean {
-  return findFacet(query, facet) !== undefined
+  return findFacets(query, facet, false).length > 0
 }
 
 /**
  * Removes the facet's qualifier if the query has one at the top level, and
- * adds it otherwise.
+ * adds it otherwise, dropping any top-level negation of it, which would
+ * leave nothing to match.
  *
  * A query whose top level is an `OR` is parenthesised first, since the new
  * qualifier would otherwise bind to its last alternative only. A query that
@@ -81,14 +95,9 @@ export function hasFacet(query: string, facet: Facet): boolean {
  * ```
  */
 export function toggleFacet(query: string, facet: Facet): string {
-  const found = findFacet(query, facet)
-  if (found) {
-    const before = query.slice(0, found.span.offset).trimEnd()
-    const after = query.slice(found.span.offset + found.span.length).trimStart()
-    const joined = !before || !after || before.endsWith('(') || after.startsWith(')')
-    return joined ? before + after : `${before} ${after}`
-  }
-  const trimmed = query.trim()
+  const found = findFacets(query, facet, false)
+  if (found.length > 0) return cut(query, found)
+  const trimmed = cut(query, findFacets(query, facet, true)).trim()
   const parsed = parseQuery(trimmed)
   const base = parsed.isOk() && parsed.value.type === 'or' ? `(${trimmed})` : trimmed
   return base ? `${base} ${facetToken(facet)}` : facetToken(facet)

@@ -2,33 +2,11 @@ import { useEffect, useState, type FormEvent } from 'react'
 
 import type { BridgeResult } from '../../api/api.types'
 import { bridge } from '../../api/bridge'
-import type { RepoRow, RestoreItem, Settings, SyncItem } from '../../../../src/desktop.types'
+import type { RestoreItem, Settings, SyncItem } from '../../../../src/desktop.types'
 import { Link } from '../link/link'
 import type { ReposViewProps } from './repos-view.types'
+import { date, itemText, STATE_LABEL } from './repos-view.utils'
 import './repos-view.css'
-
-const STATE_LABEL: Record<RepoRow['state'], string> = {
-  ready: 'Ready',
-  unrestored: 'Needs restore',
-  empty: 'Empty',
-}
-
-function date(iso: string | null | undefined): string {
-  return iso ? new Date(iso).toLocaleString() : '—'
-}
-
-function itemText(item: SyncItem | RestoreItem): { subject: string; text: string; failed: boolean } {
-  switch (item.type) {
-    case 'synced':
-      return { subject: item.repo, text: item.status, failed: false }
-    case 'restored':
-      return { subject: item.repo, text: item.status, failed: false }
-    case 'warning':
-      return { subject: item.source, text: item.message, failed: false }
-    case 'failed':
-      return { subject: item.subject, text: item.error.message, failed: true }
-  }
-}
 
 /**
  * The archive: every repository and its state, a form to sync more, and a
