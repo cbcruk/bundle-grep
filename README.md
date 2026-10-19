@@ -26,6 +26,20 @@ Everything lives under `--root`, else `$BUNDLE_GREP_ROOT`, else
 matched, 1 when nothing did, and 2 on an error. With `--json`, `list` prints a
 JSON array and the other commands one JSON object per line.
 
+### Query syntax
+
+Queries follow
+[GitHub code search syntax](https://docs.github.com/en/search-github/github-code-search/understanding-github-code-search-syntax):
+terms, `"phrases"`, `/regular expressions/`, the qualifiers `content:`,
+`path:`, `repo:`, `org:`, `user:`, `language:` and `is:fork`/`is:archived`,
+`AND`, `OR`, `NOT`, `-` and parentheses. Matching ignores case, and `\"` and
+`\\` escape a quote or a backslash inside or outside a phrase.
+
+A `path:` value that starts and ends with `/` is a regular expression, so
+`path:/src/` matches `src` anywhere in the path. For files under a top-level
+`src` directory, write the glob `path:/src/**` or the expression
+`path:/^src\//`.
+
 ## Development
 
 Requires [Bun](https://bun.com) >= 1.3.12, pnpm, and git.

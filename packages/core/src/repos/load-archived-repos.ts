@@ -11,25 +11,16 @@ import { FileSystemError } from '../archive/archive.errors'
 import type { ArchiveEntry, ArchiveLayout } from '../archive/archive.types'
 import { listArchive } from '../archive/list-archive'
 import { readMetadata } from '../archive/metadata'
-import { runGit } from '../git/run-git'
+import { hasCommit } from '../git/has-commit'
 import type { Classified, LoadedRepos } from './repos.types'
 
 const CONCURRENCY = 8
-
-async function hasCommit(entry: ArchiveEntry): Promise<boolean> {
-  if (!existsSync(entry.paths.gitDir)) return false
-  const resolved = await runGit([`--git-dir=${entry.paths.gitDir}`, 'rev-parse', '--verify', '--quiet', 'HEAD^{commit}'], {
-    cwd: entry.paths.gitDir,
-    allowExitCodes: [1],
-  })
-  return resolved.isOk() && resolved.value.exitCode === 0
-}
 
 async function classify(entry: ArchiveEntry): Promise<Classified> {
   const metadata = await readMetadata(entry.paths.metadata)
   if (metadata.isErr()) return { type: 'invalid', value: metadata.error }
   if (metadata.value?.head === null) return { type: 'empty', value: entry }
-  if (await hasCommit(entry)) {
+  if (existsSync(entry.paths.gitDir) && (await hasCommit(entry.paths.gitDir)).unwrapOr(false)) {
     return {
       type: 'repos',
       value: { name: `${entry.owner}/${entry.name}`, gitDir: entry.paths.gitDir, entry, metadata: metadata.value },

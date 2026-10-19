@@ -1,4 +1,6 @@
 import { afterAll, beforeAll, describe, expect, test } from 'bun:test'
+import { mkdirSync, mkdtempSync, rmSync } from 'node:fs'
+import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 
 import { compileQuery } from '../../src/plan/compile-query'
@@ -218,6 +220,24 @@ describe('search edge cases', () => {
 
   test('concurrency below 1 still searches', async () => {
     expect(files(await collect('content:useState', { concurrency: 0 }))).toHaveLength(3)
+  })
+
+  test('a repository with no commits matches nothing instead of failing', async () => {
+    const root = mkdtempSync(join(tmpdir(), 'bundle-grep-empty-'))
+    try {
+      const gitDir = join(root, 'empty.git')
+      runGit(root, ['init', '--quiet', '--bare', gitDir])
+      mkdirSync(join(root, 'plain'))
+      const searched = (repo: SearchRepo): Promise<SearchEvent[]> => collect('useState NOT foo', { repos: [repo] })
+
+      expect(await searched({ name: 'me/empty', gitDir })).toEqual([
+        { type: 'done', totalFiles: 0, facets: { languages: {}, repos: {}, paths: {} }, truncated: false },
+      ])
+      expect((await searched({ name: 'me/empty', gitDir, ref: 'HEAD' }))[0]).toMatchObject({ type: 'repo-error' })
+      expect((await searched({ name: 'me/plain', gitDir: join(root, 'plain') }))[0]).toMatchObject({ type: 'repo-error' })
+    } finally {
+      rmSync(root, { recursive: true, force: true })
+    }
   })
 })
 

@@ -81,6 +81,8 @@ export interface AndNode {
   type: 'and'
   /** Two or more operands. */
   children: QueryNode[]
+  /** From the first operand to the last, including any parentheses around them. */
+  span: Span
 }
 
 /** A node that holds when any child holds. */
@@ -89,6 +91,8 @@ export interface OrNode {
   type: 'or'
   /** Two or more operands. */
   children: QueryNode[]
+  /** From the first operand to the last, including any parentheses around them. */
+  span: Span
 }
 
 /** A node that holds when its child does not, from `NOT` or a `-` prefix on a qualifier. */
@@ -97,6 +101,8 @@ export interface NotNode {
   type: 'not'
   /** The negated operand. */
   child: QueryNode
+  /** From the `NOT` or `-` to the end of the operand, including any parentheses around it. */
+  span: Span
 }
 
 /** Any node of a parsed query. */

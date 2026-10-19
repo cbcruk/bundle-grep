@@ -157,6 +157,15 @@ describe('bundle-grep', () => {
     expect((await cli('search', '한글 (')).stderr).toEndWith('  한글 (\n        ^\n')
   })
 
+  test('search points at a regex git cannot compile, before searching', async () => {
+    expect(await cli('search', 'counter', 'content:/[a-z/')).toEqual({
+      code: 2,
+      stdout: '',
+      stderr:
+        'error: Invalid regular expression: missing terminating ] for character class\n  counter content:/[a-z/\n          ^^^^^^^^^^^^^^\n',
+    })
+  })
+
   test('search rejects bad numbers and missing queries', async () => {
     const bad = await cli('search', '--limit', 'ten', 'x')
     expect(bad.code).toBe(2)

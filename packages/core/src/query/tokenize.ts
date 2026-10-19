@@ -81,24 +81,31 @@ function scanRegex(query: string, start: number): ScanResult<string> {
 }
 
 /**
- * Reads a bare word starting at `start`.
+ * Reads a bare word starting at `start`, unescaping `\"` and `\\` as GitHub
+ * does outside quotes too.
  *
  * Whitespace ends it, and so does a `)` the word did not open itself, which is
  * what lets `(a OR foo)` close its group while `getValue()` stays one word.
  */
 function scanWord(query: string, start: number): Scanned<string> {
   let depth = 0
+  let value = ''
   let i = start
   for (; i < query.length; i++) {
-    const char = query[i]
+    const char = query[i]!
     if (isSpace(char)) break
+    if (char === '\\' && (query[i + 1] === '"' || query[i + 1] === '\\')) {
+      value += query[++i]
+      continue
+    }
     if (char === '(') depth++
     if (char === ')') {
       if (depth === 0) break
       depth--
     }
+    value += char
   }
-  return { value: query.slice(start, i), end: i }
+  return { value, end: i }
 }
 
 /** Reads a pattern, as a phrase, a regex, or a bare word depending on its first character. */

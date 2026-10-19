@@ -4,7 +4,7 @@
  * @module
  */
 
-import { compileQuery, loadArchivedRepos, parseQuery, repoHolds, search } from '@bundle-grep/core'
+import { compileQuery, loadArchivedRepos, parseQuery, QueryCompileError, repoHolds, search, validateRegexes } from '@bundle-grep/core'
 
 import { parseCommandArgs, wholeNumber } from '../args'
 import type { Command, Io } from '../cli.types'
@@ -58,9 +58,17 @@ async function run(args: string[], io: Io): Promise<number> {
   }
 
   const query = positionals.join(' ')
-  const plan = parseQuery(query).andThen(compileQuery)
-  if (plan.isErr()) {
-    io.error(formatQueryError(query, plan.error, errors))
+  const compiled = parseQuery(query).andThen(tree => compileQuery(tree).map(plan => ({ tree, plan })))
+  if (compiled.isErr()) {
+    io.error(formatQueryError(query, compiled.error, errors))
+    return EXIT.error
+  }
+  const { tree, plan } = compiled.value
+  const checked = await validateRegexes(tree, { signal: io.signal })
+  if (checked.isErr()) {
+    const { error } = checked
+    const message = error instanceof QueryCompileError ? formatQueryError(query, error, errors) : formatNotice('error', error.message, errors)
+    io.error(message)
     return EXIT.error
   }
 
@@ -84,7 +92,7 @@ async function run(args: string[], io: Io): Promise<number> {
   let shown = 0
   let matched = false
   let current: string | undefined
-  for await (const event of search({ plan: plan.value, repos, holds: repoHolds, limit, context, signal: io.signal })) {
+  for await (const event of search({ plan, repos, holds: repoHolds, limit, context, signal: io.signal })) {
     if (event.type === 'repo-error') {
       failures++
       if (values.json) io.write(`${JSON.stringify({ type: 'repo-error', repo: event.repo, error: event.error.message })}\n`)
