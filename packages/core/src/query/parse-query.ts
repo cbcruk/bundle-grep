@@ -119,7 +119,8 @@ class Parser {
   #parseUnary(): Parsed {
     const token = this.#peek()
     if (!token) return fail('Expected a search term', { offset: this.#queryLength, length: 0 })
-    if (token.kind !== 'operand' && this.#nesting >= MAX_NESTING) {
+    const nests = token.kind === 'lparen' || this.#isKeyword(token, 'NOT')
+    if (nests && this.#nesting >= MAX_NESTING) {
       return fail(`Query is nested more than ${MAX_NESTING} levels deep`, token.span)
     }
     this.#position++

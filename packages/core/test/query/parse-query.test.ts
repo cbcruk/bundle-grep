@@ -236,6 +236,10 @@ describe('errors', () => {
     expect(error(`${'NOT '.repeat(20000)}a`)).toMatchObject({ message: 'Query is nested more than 256 levels deep' })
   })
 
+  test('errors at the nesting limit keep their own message', () => {
+    expect(error(`${'('.repeat(256)}a OR`)).toMatchObject({ message: 'Expected a search term after OR' })
+  })
+
   test('a GitHub qualifier that is not supported', () => {
     expect(error('-symbol:foo')).toEqual({ message: 'Qualifier symbol: is not supported', offset: 1, length: 7 })
   })
