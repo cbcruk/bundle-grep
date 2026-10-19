@@ -13,6 +13,9 @@ import { tokenize } from './tokenize'
 
 type Parsed = Result<QueryNode, QueryParseError>
 
+/** Deepest nesting of parentheses and `NOT`s accepted, well short of the call stack's limit. */
+const MAX_NESTING = 256
+
 function fail(message: string, span: Span): Parsed {
   return Result.err(new QueryParseError({ message, span }))
 }
@@ -38,6 +41,7 @@ class Parser {
   #queryLength: number
   #position = 0
   #depth = 0
+  #nesting = 0
 
   constructor(tokens: Token[], queryLength: number) {
     this.#tokens = tokens
@@ -115,6 +119,9 @@ class Parser {
   #parseUnary(): Parsed {
     const token = this.#peek()
     if (!token) return fail('Expected a search term', { offset: this.#queryLength, length: 0 })
+    if (token.kind !== 'operand' && this.#nesting >= MAX_NESTING) {
+      return fail(`Query is nested more than ${MAX_NESTING} levels deep`, token.span)
+    }
     this.#position++
 
     switch (token.kind) {
@@ -123,7 +130,10 @@ class Parser {
 
       case 'keyword': {
         if (token.keyword !== 'NOT') return fail(`Expected a search term before ${token.keyword}`, token.span)
-        return this.#parseAfter(token).map(child => ({ type: 'not', child }))
+        this.#nesting++
+        const child = this.#parseAfter(token)
+        this.#nesting--
+        return child.map(child => ({ type: 'not', child }))
       }
 
       case 'rparen':
@@ -134,8 +144,10 @@ class Parser {
         if (close?.kind === 'rparen') return fail('Expected a search term', close.span)
 
         this.#depth++
+        this.#nesting++
         const inner = this.#parseOr()
         this.#depth--
+        this.#nesting--
         if (inner.isErr()) return inner
 
         if (this.#peek()?.kind !== 'rparen') return fail('Missing closing parenthesis', token.span)

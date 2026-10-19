@@ -15,8 +15,9 @@ export interface Span {
 /**
  * A pattern to look for: a fixed string, or a regular expression.
  *
- * Bare words and quoted phrases are both `literal`; quoting only lets a
- * literal contain whitespace, parentheses, or a keyword. A `regex` source is
+ * Bare words and quoted phrases are both `literal`. Quoting lets a literal
+ * contain whitespace, parentheses, or a keyword, and for `path:` it also turns
+ * glob characters off, as on GitHub — hence `quoted`. A `regex` source is
  * passed to git uninterpreted, so it is not validated here.
  */
 export type Pattern =
@@ -25,6 +26,8 @@ export type Pattern =
       kind: 'literal'
       /** The string, with quotes and escapes removed. */
       value: string
+      /** Whether it was written as a `"quoted phrase"`. */
+      quoted: boolean
     }
   | {
       /** A regular expression, from `/.../`. */
