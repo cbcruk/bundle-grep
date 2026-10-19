@@ -37,7 +37,7 @@ export function createApi(options: ApiOptions): RequestHandler {
 
     const refused = guard(request, options)
     if (refused) return refused
-    if (pathname === '/api/search') return searchRoute(request, options.layout)
+    if (pathname === '/api/search') return searchRoute(request, options)
     if (pathname.startsWith('/api/blob/')) return blobRoute(request, options.layout)
     return errorResponse(404, { _tag: 'NotFoundError', message: `No API at ${pathname}` })
   }

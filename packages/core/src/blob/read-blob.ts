@@ -38,8 +38,9 @@ export async function readBlob(options: ReadBlobOptions): Promise<Result<Uint8Ar
   const notFound = (): Result<Uint8Array, ReadBlobError> =>
     Result.err(new BlobNotFoundError({ path, message: `${ref} has no file ${path}` }))
 
-  const listed = await runGit(['--literal-pathspecs', 'ls-tree', '-l', '-z', '--end-of-options', ref, '--', path], {
+  const listed = await runGit(['ls-tree', '-l', '-z', '--end-of-options', ref, path], {
     cwd: gitDir,
+    env: { GIT_LITERAL_PATHSPECS: '1' },
     signal,
   })
   if (listed.isErr()) return listed

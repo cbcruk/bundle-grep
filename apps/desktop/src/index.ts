@@ -13,6 +13,7 @@ export type {
   Bridge,
   BridgeOptions,
   BridgeResult,
+  OpenAppError,
   OpenAppOptions,
   RepoList,
   RepoRow,
@@ -22,4 +23,4 @@ export type {
   SyncItem,
   WireError,
 } from './desktop.types'
-export { openApp, type OpenAppError } from './open-app'
+export { openApp } from './open-app'

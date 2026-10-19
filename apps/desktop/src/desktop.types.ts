@@ -5,7 +5,7 @@
  */
 
 import type { ArchiveLayout, RepoMetadata, Span, SyncStatus, RestoreStatus } from '@bundle-grep/core'
-import type { LaunchOptions } from 'barlo'
+import type { EvaluateError, LaunchError, LaunchOptions, LoadError, WindowError } from 'barlo'
 
 /** Options for {@linkcode createApi}. */
 export interface ApiOptions {
@@ -15,7 +15,12 @@ export interface ApiOptions {
   host: string
   /** The per-run secret every `/api/` request must carry in {@linkcode TOKEN_HEADER}. */
   token: string
+  /** How long a search stream may go quiet before a heartbeat line; 5000 by default. */
+  heartbeatMs?: number
 }
+
+/** Options for {@linkcode searchRoute}. */
+export type SearchRouteOptions = Pick<ApiOptions, 'layout' | 'heartbeatMs'>
 
 /** Options for {@linkcode createBridge}. */
 export interface BridgeOptions {
@@ -30,6 +35,9 @@ export interface BridgeOptions {
   /** Stops a running sync or restore when the app closes. */
   signal?: AbortSignal
 }
+
+/** Why the window could not be opened. */
+export type OpenAppError = LaunchError | EvaluateError | WindowError | LoadError
 
 /** Options for {@linkcode openApp}. */
 export interface OpenAppOptions extends BridgeOptions {

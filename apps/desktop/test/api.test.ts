@@ -34,8 +34,12 @@ beforeAll(async () => {
 
 afterAll(() => fixture[Symbol.dispose]())
 
-function call(path: string, init: RequestInit & { headers?: Record<string, string> } = {}): Promise<Response | undefined> {
-  const api = createApi({ layout, host: HOST, token: TOKEN })
+function call(
+  path: string,
+  init: RequestInit & { headers?: Record<string, string> } = {},
+  heartbeatMs?: number,
+): Promise<Response | undefined> {
+  const api = createApi({ layout, host: HOST, token: TOKEN, heartbeatMs })
   const headers = { host: HOST, [TOKEN_HEADER]: TOKEN, ...init.headers }
   return Promise.resolve(api(new Request(`http://${HOST}${path}`, { ...init, headers })))
 }
@@ -112,6 +116,9 @@ describe('/api/search', () => {
     expect(await errorOf(await call('/api/search?q=%20'))).toEqual({ status: 400, _tag: 'UsageError' })
     expect(await errorOf(await call('/api/search?q=x&limit=-1'))).toEqual({ status: 400, _tag: 'UsageError' })
     expect(await errorOf(await call('/api/search?q=x&context=ten'))).toEqual({ status: 400, _tag: 'UsageError' })
+    expect(await errorOf(await call('/api/search?q=x&limit=1001'))).toEqual({ status: 400, _tag: 'UsageError' })
+    expect(await errorOf(await call('/api/search?q=x&context=21'))).toEqual({ status: 400, _tag: 'UsageError' })
+    expect((await call('/api/search?q=x&limit=1000&context=20'))?.status).toBe(200)
   })
 
   test('query errors carry their span', async () => {
@@ -129,6 +136,13 @@ describe('/api/search', () => {
       _tag: 'QueryCompileError',
       span: { offset: 2, length: 4 },
     })
+  })
+
+  test('a quiet stream sends heartbeats, and still delivers every event', async () => {
+    const events = await lines(await call('/api/search?q=useState', {}, 0))
+    expect(events.some(event => event.type === 'heartbeat')).toBe(true)
+    const real = events.filter(event => event.type !== 'heartbeat')
+    expect(real.map(event => event.type)).toEqual(['archive', 'file', 'done'])
   })
 
   test('cancelling the body ends the search', async () => {
@@ -201,6 +215,8 @@ describe('/api/blob', () => {
       '/api/blob/me/app/HEAD:src/counter.ts',
       '/api/blob/me/app/HEAD/src%2F..%2FREADME.md',
       '/api/blob/me/app/HEAD/%ZZ',
+      '/api/blob/me/app/HEAD/README.md%00',
+      '/api/blob/me%00/app/HEAD/README.md',
       '/api/blob/me%2Fx/app/HEAD/README.md',
     ]) {
       expect({ path, ...(await errorOf(await call(path))) }).toMatchObject({ path, status: 400 })
