@@ -64,6 +64,7 @@ describe('syncRepo', () => {
       defaultBranch: 'main',
       head: fixture.git('rev-parse', 'HEAD'),
       refsDigest: outcome.metadata.refsDigest,
+      bundleSize: statSync(outcome.paths.bundle).size,
       pushedAt: null,
       syncedAt: '2026-01-01T00:00:00.000Z',
     })
@@ -127,6 +128,11 @@ describe('syncRepo', () => {
     writeFileSync(first.paths.bundle, 'garbage')
     expect((await syncRepo(target, options)).unwrap().status).toBe('updated')
 
+    const whole = readFileSync(first.paths.bundle)
+    writeFileSync(first.paths.bundle, whole.subarray(0, whole.length - 40))
+    expect((await syncRepo(target, options)).unwrap().status).toBe('updated')
+    expect(readFileSync(first.paths.bundle)).toEqual(whole)
+
     using older = createFixtureRepo(FIRST)
     writeFileSync(first.paths.bundle, readFileSync(older.bundle))
     expect((await syncRepo(target, options)).unwrap().status).toBe('updated')
@@ -162,19 +168,20 @@ describe('syncRepo', () => {
     expect(fixture.git('for-each-ref')).toBe(before)
   })
 
-  test('recovers from a lock left by a killed sync', async () => {
+  test('is not blocked by files a killed sync left behind', async () => {
     using fixture = createFixtureRepo(FIRST)
     const { options, target } = setup(fixture)
     const first = (await syncRepo(target, options)).unwrap()
     writeFileSync(`${first.paths.bundle}.tmp.lock`, '')
     writeFileSync(`${first.paths.bundle}.tmp`, '')
+    writeFileSync(`${first.paths.bundle}.lock`, '')
 
     fixture.git('commit', '--quiet', '--allow-empty', '--message', 'more')
 
     expect((await syncRepo(target, options)).unwrap().status).toBe('updated')
   })
 
-  test('leaves a password in the URL out of the metadata', async () => {
+  test('leaves credentials in the URL out of the metadata', async () => {
     using fixture = createFixtureRepo(FIRST)
     const { options, target } = setup(fixture)
     const url = 'https://user:secret@git.example.invalid/acme/widgets'
@@ -187,6 +194,7 @@ describe('syncRepo', () => {
 
     expect(outcome.unwrap().metadata.url).toBe('https://git.example.invalid/acme/widgets')
     expect(readFileSync(outcome.unwrap().paths.metadata, 'utf8')).not.toContain('secret')
+    expect(readFileSync(outcome.unwrap().paths.metadata, 'utf8')).not.toContain('user')
   })
 
   test('rebuilds a bundle whose metadata is unreadable', async () => {

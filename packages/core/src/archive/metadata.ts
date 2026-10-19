@@ -25,7 +25,8 @@ function isMetadata(value: unknown): value is RepoMetadata {
     STRINGS.every(key => typeof value[key] === 'string') &&
     BOOLEANS.every(key => typeof value[key] === 'boolean') &&
     NULLABLE_STRINGS.every(key => value[key] === null || typeof value[key] === 'string') &&
-    (value.isPrivate === null || typeof value.isPrivate === 'boolean')
+    (value.isPrivate === null || typeof value.isPrivate === 'boolean') &&
+    (value.bundleSize === null || typeof value.bundleSize === 'number')
   )
 }
 

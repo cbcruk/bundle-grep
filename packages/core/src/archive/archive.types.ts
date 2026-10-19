@@ -53,6 +53,8 @@ export interface RepoMetadata {
   head: string | null
   /** A digest of every ref and its object, which tells whether the bundle is out of date. */
   refsDigest: string
+  /** The bundle's size in bytes, which tells a truncated bundle apart; `null` when none was written. */
+  bundleSize: number | null
   /** When the host says the repository was last pushed to, as ISO 8601, or `null` when unknown. */
   pushedAt: string | null
   /** When the repository was last synced, as ISO 8601. */

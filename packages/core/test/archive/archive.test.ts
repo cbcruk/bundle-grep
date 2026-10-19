@@ -19,6 +19,7 @@ const METADATA: RepoMetadata = {
   defaultBranch: 'main',
   head: '0'.repeat(40),
   refsDigest: 'digest',
+  bundleSize: 1024,
   pushedAt: null,
   syncedAt: '2026-01-01T00:00:00.000Z',
 }
