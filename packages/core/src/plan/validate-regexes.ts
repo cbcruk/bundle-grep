@@ -6,12 +6,13 @@
 
 import { Result } from 'better-result'
 import { randomUUID } from 'node:crypto'
+import { existsSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 
 import type { GitError } from '../git/git.errors'
 import { runGit } from '../git/run-git'
 import type { QueryNode, Span } from '../query/query.types'
-import { PcreUnavailableError } from '../search/search.errors'
+import type { PcreUnavailableError } from '../search/search.errors'
 import { toSearchRepoError } from '../search/search'
 import { grepArgs } from './grep-args'
 import { QueryCompileError } from './plan.errors'
@@ -44,11 +45,24 @@ function contentRegexes(node: QueryNode, into: Map<string, Regex>): Map<string, 
   return into
 }
 
-/** Turns git's `fatal: -e option, '<source>': <reason>` into the reason alone. */
-function reasonOf(stderr: string, source: string): string {
-  const message = stderr.trim().replace(/^fatal: /, '')
-  const prefix = `-e option, '${source}': `
-  return message.startsWith(prefix) ? message.slice(prefix.length) : message
+/**
+ * Finds the reason in git's `fatal: -e option, '<source>': <reason>` line.
+ *
+ * @returns The reason, or `undefined` when git failed for something other
+ * than the pattern, such as a broken config file.
+ */
+function reasonOf(stderr: string, source: string): string | undefined {
+  const prefix = `fatal: -e option, '${source}': `
+  return stderr
+    .split(/\r?\n/)
+    .find(line => line.startsWith(prefix))
+    ?.slice(prefix.length)
+}
+
+/** A directory to run git in that exists even when `TMPDIR` names one that does not. */
+function scratchDir(): string {
+  const dir = tmpdir()
+  return existsSync(dir) ? dir : process.cwd()
 }
 
 /**
@@ -56,7 +70,9 @@ function reasonOf(stderr: string, source: string): string {
  *
  * git compiles its patterns before reading any file, and `--no-index` with a
  * pathspec naming nothing that exists leaves it no files to read, so this
- * needs no repository and does no work beyond the compile.
+ * needs no repository of its own and does no work beyond the compile. git
+ * still reads its config files, including those of a repository around the
+ * directory it runs in.
  */
 async function checkRegex(
   { source, span }: Regex,
@@ -64,17 +80,12 @@ async function checkRegex(
 ): Promise<Result<void, QueryCompileError | PcreUnavailableError | GitError>> {
   const leaf: GrepLeaf = { op: 'grep', engine: 'pcre', patterns: [source], match: 'any' }
   const args = ['grep', '--no-index', '-q', ...grepArgs(leaf), '--', `:(literal)${randomUUID()}/`]
-  const result = await runGit(args, { cwd: tmpdir(), allowExitCodes: [1], signal })
+  const result = await runGit(args, { cwd: scratchDir(), allowExitCodes: [1], signal })
   if (result.isOk()) return Result.ok()
 
-  const error = toSearchRepoError(result.error)
-  if (error instanceof PcreUnavailableError || result.error.exitCode !== 128 || signal?.aborted) return Result.err(error)
-  return Result.err(
-    new QueryCompileError({
-      message: `Invalid regular expression: ${reasonOf(result.error.stderr, source)}`,
-      span,
-    }),
-  )
+  const reason = signal?.aborted ? undefined : reasonOf(result.error.stderr, source)
+  if (reason === undefined) return Result.err(toSearchRepoError(result.error))
+  return Result.err(new QueryCompileError({ message: `Invalid regular expression: ${reason}`, span }))
 }
 
 /**

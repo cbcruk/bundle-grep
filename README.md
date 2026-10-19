@@ -33,7 +33,8 @@ Queries follow
 terms, `"phrases"`, `/regular expressions/`, the qualifiers `content:`,
 `path:`, `repo:`, `org:`, `user:`, `language:` and `is:fork`/`is:archived`,
 `AND`, `OR`, `NOT`, `-` and parentheses. Matching ignores case, and `\"` and
-`\\` escape a quote or a backslash inside or outside a phrase.
+`\\` escape a quote or a backslash inside or outside a phrase. Inside
+`/.../` only `\/` is unescaped, and the rest is passed on as written.
 
 A `path:` value that starts and ends with `/` is a regular expression, so
 `path:/src/` matches `src` anywhere in the path. For files under a top-level

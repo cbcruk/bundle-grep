@@ -1,5 +1,5 @@
 import { afterAll, beforeAll, describe, expect, test } from 'bun:test'
-import { mkdirSync, mkdtempSync, rmSync } from 'node:fs'
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 
@@ -222,7 +222,7 @@ describe('search edge cases', () => {
     expect(files(await collect('content:useState', { concurrency: 0 }))).toHaveLength(3)
   })
 
-  test('a repository with no commits matches nothing instead of failing', async () => {
+  test('a repository with no refs matches nothing, a broken one still fails', async () => {
     const root = mkdtempSync(join(tmpdir(), 'bundle-grep-empty-'))
     try {
       const gitDir = join(root, 'empty.git')
@@ -235,6 +235,11 @@ describe('search edge cases', () => {
       ])
       expect((await searched({ name: 'me/empty', gitDir, ref: 'HEAD' }))[0]).toMatchObject({ type: 'repo-error' })
       expect((await searched({ name: 'me/plain', gitDir: join(root, 'plain') }))[0]).toMatchObject({ type: 'repo-error' })
+
+      const broken = join(root, 'broken.git')
+      runGit(root, ['init', '--quiet', '--bare', broken])
+      writeFileSync(join(broken, 'refs/heads/main'), `${'1'.repeat(40)}\n`)
+      expect((await searched({ name: 'me/broken', gitDir: broken }))[0]).toMatchObject({ type: 'repo-error' })
     } finally {
       rmSync(root, { recursive: true, force: true })
     }
