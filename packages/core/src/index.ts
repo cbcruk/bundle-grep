@@ -54,8 +54,20 @@ export { repoHolds } from './repos/repo-holds'
 export type { ArchivedRepo, LoadedRepos } from './repos/repos.types'
 export { restoreRepo, restoreRepos } from './restore/restore-repo'
 export type { RestoreError, RestoreEvent, RestoreOptions, RestoreOutcome, RestoreStatus } from './restore/restore.types'
+export { expandHome } from './sync/expand-home'
+export { resolveSyncSource } from './sync/resolve-sync-source'
 export { syncRepo, syncRepos } from './sync/sync-repo'
-export type { SyncError, SyncEvent, SyncOptions, SyncOutcome, SyncStatus, SyncTarget } from './sync/sync.types'
+export type {
+  ResolvedSource,
+  ResolveSyncSourceOptions,
+  SourceError,
+  SyncError,
+  SyncEvent,
+  SyncOptions,
+  SyncOutcome,
+  SyncStatus,
+  SyncTarget,
+} from './sync/sync.types'
 export { targetFromUrl } from './sync/target-from-url'
 export type {
   AndNode,

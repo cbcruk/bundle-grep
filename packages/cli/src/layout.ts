@@ -4,11 +4,9 @@
  * @module
  */
 
-import type { ArchiveLayout } from '@bundle-grep/core'
+import { expandHome, type ArchiveLayout } from '@bundle-grep/core'
 import { homedir } from 'node:os'
 import { join, resolve } from 'node:path'
-
-import { expandHome } from './expand-home'
 
 /**
  * Resolves the archive and cache directories under one root.

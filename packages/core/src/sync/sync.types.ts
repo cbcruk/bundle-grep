@@ -7,6 +7,8 @@
 import type { FileSystemError, InvalidRepoNameError } from '../archive/archive.errors'
 import type { ArchiveLayout, ArchivePaths, RepoMetadata } from '../archive/archive.types'
 import type { GitError } from '../git/git.errors'
+import type { GhError } from '../github/github.errors'
+import type { GithubOptions } from '../github/github.types'
 
 /**
  * A repository to sync, with what its host reports about it.
@@ -75,3 +77,20 @@ export type SyncError = GitError | FileSystemError | InvalidRepoNameError
 export type SyncEvent =
   | { type: 'synced'; target: SyncTarget; outcome: SyncOutcome }
   | { type: 'failed'; target: SyncTarget; error: SyncError }
+
+/** Why a sync source could not be turned into repositories. */
+export type SourceError = GhError | InvalidRepoNameError
+
+/** What {@linkcode resolveSyncSource} found for one source. */
+export interface ResolvedSource {
+  /** The repositories to sync. */
+  targets: SyncTarget[]
+  /** Something worth telling the user, even though the source resolved. */
+  warning?: string
+}
+
+/** Options for {@linkcode resolveSyncSource}. */
+export interface ResolveSyncSourceOptions extends GithubOptions {
+  /** Most repositories an owner may have; listing fails beyond it. 1000 by default. */
+  limit?: number
+}

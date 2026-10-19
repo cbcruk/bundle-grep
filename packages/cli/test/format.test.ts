@@ -3,7 +3,8 @@ import { rmSync, writeFileSync } from 'node:fs'
 import { homedir, tmpdir } from 'node:os'
 import { join } from 'node:path'
 
-import { expandHome } from '../src/expand-home'
+import { expandHome } from '@bundle-grep/core'
+
 import { printable, stylesFor } from '../src/format/ansi'
 import { formatQueryError } from '../src/format/query-error'
 import { formatFile } from '../src/format/search-output'
