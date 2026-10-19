@@ -39,6 +39,8 @@ for (const rel of [...new Glob('packages/*/{src,test}/**/*.ts').scanSync(ROOT)].
     if (line === '}') inType = false
 
     if (line.startsWith('export default')) continue
+    // Re-exports are documented where they are declared.
+    if (/^export (type )?\{/.test(line)) continue
     if (!EXPORT.test(line) && !(inType && MEMBER.test(line))) continue
 
     let j = i - 1
