@@ -1,5 +1,32 @@
 {
  "source": "https://raw.githubusercontent.com/github-linguist/linguist/main/lib/linguist/languages.yml",
+ "popular": [
+  "C",
+  "C#",
+  "C++",
+  "CoffeeScript",
+  "CSS",
+  "Dart",
+  "DM",
+  "Elixir",
+  "Go",
+  "Groovy",
+  "HTML",
+  "Java",
+  "JavaScript",
+  "Kotlin",
+  "Objective-C",
+  "Perl",
+  "PHP",
+  "PowerShell",
+  "Python",
+  "Ruby",
+  "Rust",
+  "Scala",
+  "Shell",
+  "Swift",
+  "TypeScript"
+ ],
  "languages": {
   "1C Enterprise": {
    "aliases": [],

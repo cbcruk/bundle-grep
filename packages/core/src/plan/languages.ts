@@ -21,6 +21,69 @@ for (const [name, language] of Object.entries(data.languages)) {
   }
 }
 
+const popular = new Set<string>(data.popular)
+
+type Entry = (typeof data.languages)[keyof typeof data.languages]
+
+/**
+ * Orders languages competing for one extension: popular ones first, then one
+ * whose primary (first) extension it is, then the one with more extensions
+ * and filenames — a rough stand-in for how common it is.
+ */
+function rank(extension: string, [name, language]: [string, Entry]): number[] {
+  return [
+    popular.has(name) ? 0 : 1,
+    language.extensions[0]?.toLowerCase() === extension ? 0 : 1,
+    -(language.extensions.length + language.filenames.length),
+  ]
+}
+
+function compareRanks(a: number[], b: number[]): number {
+  for (let i = 0; i < a.length; i++) if (a[i] !== b[i]) return a[i]! - b[i]!
+  return 0
+}
+
+const candidates = new Map<string, [string, Entry][]>()
+const byFilename = new Map<string, string>()
+for (const entry of Object.entries(data.languages)) {
+  for (const extension of entry[1].extensions) {
+    const key = extension.toLowerCase()
+    candidates.set(key, [...(candidates.get(key) ?? []), entry])
+  }
+  for (const filename of entry[1].filenames) {
+    if (!byFilename.has(filename.toLowerCase())) byFilename.set(filename.toLowerCase(), entry[0])
+  }
+}
+
+const byExtension = new Map<string, string>(
+  [...candidates].map(([extension, entries]) => [
+    extension,
+    entries.toSorted((a, b) => compareRanks(rank(extension, a), rank(extension, b)))[0]![0],
+  ]),
+)
+
+/**
+ * Names the language a path most likely belongs to, for grouping results.
+ *
+ * An exact filename wins over an extension, and the longest matching extension
+ * wins. An extension several languages share goes to a popular language first,
+ * then to one whose primary extension it is, then to the broader language — so
+ * `.md` is Markdown, `.ts` TypeScript, and `.h` C++. Linguist's content
+ * heuristics are not applied.
+ *
+ * @returns The canonical language name, or `undefined` for an unknown file type.
+ */
+export function languageOf(path: string): string | undefined {
+  const name = path.slice(path.lastIndexOf('/') + 1).toLowerCase()
+  const exact = byFilename.get(name)
+  if (exact) return exact
+  for (let dot = name.indexOf('.'); dot !== -1; dot = name.indexOf('.', dot + 1)) {
+    const language = byExtension.get(name.slice(dot))
+    if (language) return language
+  }
+  return undefined
+}
+
 /**
  * Finds a language by its name or one of its aliases.
  *

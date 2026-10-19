@@ -1,0 +1,133 @@
+/**
+ * Types for running a search across repositories.
+ *
+ * @module
+ */
+
+import type { GitError } from '../git/git.errors'
+import type { FilterLeaf, SearchPlan } from '../plan/plan.types'
+import type { PcreUnavailableError } from './search.errors'
+
+/** A repository to search. */
+export interface SearchRepo {
+  /** The repository's name as qualifiers see it, such as `"cbcruk/barlo"`. */
+  name: string
+  /** The bare repository to run git in. */
+  gitDir: string
+  /** The tree to search. Defaults to `HEAD`. */
+  ref?: string
+}
+
+/** One line as `git grep` printed it, before highlighting. */
+export interface GrepLine {
+  /** The path, with the `<ref>:` prefix removed. */
+  path: string
+  /** The 1-based line number. */
+  number: number
+  /** The 1-based byte offset of the first match; `undefined` for a context line. */
+  byteColumn?: number
+  /** The line's text. */
+  text: string
+}
+
+/** A highlighted range within a line, in UTF-16 code units. */
+export interface MatchRange {
+  /** Index of the first highlighted character. */
+  start: number
+  /** Index just past the last highlighted character. */
+  end: number
+}
+
+/** One line of a search result. */
+export interface SearchLine {
+  /** The 1-based line number. */
+  number: number
+  /** The line's text, without its line terminator. */
+  text: string
+  /** `true` for a line shown only as context around a match. */
+  context: boolean
+  /**
+   * Where git reported the line's first match, as a UTF-16 index; `undefined`
+   * for context lines.
+   */
+  column?: number
+  /**
+   * Every match of a highlight pattern in the line. Empty for context lines,
+   * and for a match whose regex only PCRE understands — fall back to
+   * {@linkcode SearchLine.column} then.
+   */
+  ranges: MatchRange[]
+}
+
+/** The file-level grouping of results, as GitHub's sidebar shows it. */
+export interface SearchFacets {
+  /** Matching files per language name; files of no known language are left out. */
+  languages: Record<string, number>
+  /** Matching files per repository name. */
+  repos: Record<string, number>
+  /** Matching files per top-level directory, with `""` for files at the root. */
+  paths: Record<string, number>
+}
+
+/** Why a repository could not be searched. */
+export type SearchRepoError = GitError | PcreUnavailableError
+
+/** Something that happened during a search, in the order it happened. */
+export type SearchEvent =
+  | {
+      /** A matching file, with its matching lines. */
+      type: 'file'
+      /** The repository's {@linkcode SearchRepo.name}. */
+      repo: string
+      /** The path relative to the repository root. */
+      path: string
+      /** What {@linkcode languageOf} says, if anything. */
+      language?: string
+      /**
+       * Matching and context lines in line order. Empty when the file matched
+       * on its path alone.
+       */
+      lines: SearchLine[]
+    }
+  | {
+      /** A repository that failed; the others carry on. */
+      type: 'repo-error'
+      /** The repository's {@linkcode SearchRepo.name}. */
+      repo: string
+      /** What went wrong. */
+      error: SearchRepoError
+    }
+  | {
+      /** The search is over. Always the last event. */
+      type: 'done'
+      /** How many files matched across every repository searched, beyond any limit. */
+      totalFiles: number
+      /** Grouped counts over the same files as `totalFiles`. */
+      facets: SearchFacets
+      /** `true` when `file` events stopped at {@linkcode SearchOptions.limit}. */
+      truncated: boolean
+      /** Why the search stopped early, if it did; results so far are still valid. */
+      stopped?: 'aborted' | 'timeout'
+    }
+
+/** Options for {@linkcode search}. */
+export interface SearchOptions {
+  /** The compiled query. */
+  plan: SearchPlan
+  /** The repositories to search. */
+  repos: readonly SearchRepo[]
+  /** Says whether a repository qualifier such as `repo:` or `is:fork` holds for a repository. */
+  holds: (repo: SearchRepo, filter: FilterLeaf) => boolean
+  /** Most `file` events to emit. Defaults to `100`. */
+  limit?: number
+  /** Context lines around each match, as git's `-C`. Defaults to `0`. */
+  context?: number
+  /** Most matching lines per file. Defaults to `20`. */
+  maxMatchesPerFile?: number
+  /** Repositories searched at once. Defaults to `4`. */
+  concurrency?: number
+  /** Stops the search after this many milliseconds. */
+  timeoutMs?: number
+  /** Stops the search when aborted. */
+  signal?: AbortSignal
+}

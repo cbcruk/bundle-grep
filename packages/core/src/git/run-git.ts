@@ -23,7 +23,11 @@ import type { GitOutput, RunGitOptions } from './git.types'
  */
 export function runGit(args: readonly string[], options: RunGitOptions): Promise<Result<GitOutput, GitError>> {
   return new Promise(resolve => {
-    const child = spawn('git', ['-c', 'color.ui=never', ...args], { cwd: options.cwd, stdio: ['ignore', 'pipe', 'pipe'] })
+    const child = spawn('git', ['-c', 'color.ui=never', ...args], {
+      cwd: options.cwd,
+      stdio: ['ignore', 'pipe', 'pipe'],
+      signal: options.signal,
+    })
     const stdout: Buffer[] = []
     const stderr: Buffer[] = []
     child.stdout.on('data', (chunk: Buffer) => stdout.push(chunk))

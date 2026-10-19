@@ -127,4 +127,6 @@ export interface ListMatchingFilesOptions {
   expr: FileExpr
   /** The tree to search. Defaults to `HEAD`. */
   ref?: string
+  /** Stops the search, killing any git still running. */
+  signal?: AbortSignal
 }

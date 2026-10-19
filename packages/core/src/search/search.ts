@@ -1,0 +1,230 @@
+/**
+ * Runs a compiled query across repositories and streams the results.
+ *
+ * @module
+ */
+
+import { Result } from 'better-result'
+
+import type { GitError } from '../git/git.errors'
+import { runGit } from '../git/run-git'
+import { grepArgs } from '../plan/grep-args'
+import { languageOf } from '../plan/languages'
+import { listMatchingFiles } from '../plan/list-matching-files'
+import type { GrepLeaf } from '../plan/plan.types'
+import { specializePlan } from '../plan/specialize-plan'
+import type { Pattern } from '../query/query.types'
+import { byteColumnToIndex, createHighlighter } from './match-ranges'
+import { parseGrepOutput } from './parse-grep-output'
+import { PcreUnavailableError } from './search.errors'
+import type { SearchEvent, SearchFacets, SearchLine, SearchOptions, SearchRepo, SearchRepoError } from './search.types'
+
+/** Above this many files, line extraction greps the whole tree and filters rather than naming each file. */
+const MAX_LITERAL_PATHSPECS = 500
+
+/**
+ * Tells a git built without PCRE apart from other git failures.
+ *
+ * @returns A {@linkcode PcreUnavailableError} when git's message says PCRE is
+ * missing, the original error otherwise.
+ */
+export function toSearchRepoError(error: GitError): SearchRepoError {
+  if (/USE_LIBPCRE|Perl-compatible/i.test(error.stderr)) {
+    return new PcreUnavailableError({
+      message: 'This git was built without PCRE support, which regular expression searches need',
+    })
+  }
+  return error
+}
+
+function engineGroups(patterns: readonly Pattern[]): GrepLeaf[] {
+  const fixed = patterns.flatMap(pattern => (pattern.kind === 'literal' ? [pattern.value] : []))
+  const pcre = patterns.flatMap(pattern => (pattern.kind === 'regex' ? [pattern.source] : []))
+  return [
+    ...(fixed.length ? [{ op: 'grep', engine: 'fixed', patterns: fixed, match: 'any' } as const] : []),
+    ...(pcre.length ? [{ op: 'grep', engine: 'pcre', patterns: pcre, match: 'any' } as const] : []),
+  ]
+}
+
+interface LineOptions {
+  repo: SearchRepo
+  ref: string
+  files: readonly string[]
+  patterns: readonly Pattern[]
+  context: number
+  maxMatchesPerFile: number
+  signal: AbortSignal
+}
+
+/**
+ * Collects matching and context lines for a set of files.
+ *
+ * Runs one `git grep` per pattern engine and merges them, a line that matched
+ * in either run winning over the same line shown as context.
+ */
+async function collectLines(options: LineOptions): Promise<Result<Map<string, SearchLine[]>, GitError>> {
+  const { repo, ref, files, patterns, context, maxMatchesPerFile, signal } = options
+  const wanted = new Set(files)
+  const pathspecs = files.length <= MAX_LITERAL_PATHSPECS ? files.map(path => `:(literal)${path}`) : []
+  const highlight = createHighlighter(patterns)
+  const byFile = new Map<string, Map<number, SearchLine>>()
+
+  for (const leaf of engineGroups(patterns)) {
+    const args = [
+      'grep',
+      '--no-color',
+      '-n',
+      '--column',
+      '-z',
+      '-I',
+      `--max-count=${maxMatchesPerFile}`,
+      ...(context > 0 ? [`-C${context}`] : []),
+      ...grepArgs(leaf),
+      ref,
+      '--',
+      ...pathspecs,
+    ]
+    const result = await runGit(args, { cwd: repo.gitDir, allowExitCodes: [1], signal })
+    if (result.isErr()) return result
+
+    for (const line of parseGrepOutput(result.value.stdout, ref)) {
+      if (!wanted.has(line.path)) continue
+      const lines = byFile.get(line.path) ?? new Map<number, SearchLine>()
+      byFile.set(line.path, lines)
+      const isMatch = line.byteColumn !== undefined
+      if (!isMatch && lines.has(line.number)) continue
+      lines.set(line.number, {
+        number: line.number,
+        text: line.text,
+        context: !isMatch,
+        column: isMatch ? byteColumnToIndex(line.text, line.byteColumn!) : undefined,
+        ranges: isMatch ? highlight(line.text) : [],
+      })
+    }
+  }
+
+  return Result.ok(
+    new Map([...byFile].map(([path, lines]) => [path, [...lines.values()].sort((a, b) => a.number - b.number)])),
+  )
+}
+
+function count(record: Record<string, number>, key: string): void {
+  record[key] = (record[key] ?? 0) + 1
+}
+
+/**
+ * Searches repositories for a compiled query, streaming results as they come.
+ *
+ * Repositories are searched {@linkcode SearchOptions.concurrency} at a time,
+ * and one ruled out by its qualifiers is skipped without running git. Each
+ * repository's matching files arrive in path order; repositories arrive as
+ * they finish. A repository that fails yields a `repo-error` and the rest
+ * carry on. The last event is always `done`, carrying the total and facets over
+ * every matching file even when `file` events stopped at the limit.
+ *
+ * Stopping early — breaking out of the loop, aborting
+ * {@linkcode SearchOptions.signal}, or reaching
+ * {@linkcode SearchOptions.timeoutMs} — kills any git still running.
+ *
+ * @example Printing matching lines
+ * ```ts
+ * import { compileQuery, parseQuery, search } from "@bundle-grep/core";
+ *
+ * const plan = parseQuery("useState language:typescript").andThen(compileQuery).unwrap();
+ * const repos = [{ name: "cbcruk/barlo", gitDir: "./cache/cbcruk/barlo.git" }];
+ *
+ * for await (const event of search({ plan, repos, holds: () => true })) {
+ *   if (event.type === "file") {
+ *     for (const line of event.lines) console.log(`${event.repo}/${event.path}:${line.number}: ${line.text}`);
+ *   }
+ * }
+ * ```
+ */
+export async function* search(options: SearchOptions): AsyncGenerator<SearchEvent, void, undefined> {
+  const { plan, repos, holds, limit = 100, context = 0, maxMatchesPerFile = 20, concurrency = 4 } = options
+
+  const finished = new AbortController()
+  const timeout = options.timeoutMs === undefined ? undefined : AbortSignal.timeout(options.timeoutMs)
+  const stop = AbortSignal.any(
+    [finished.signal, options.signal, timeout].filter((signal): signal is AbortSignal => signal !== undefined),
+  )
+
+  const queue: SearchEvent[] = []
+  let wake: (() => void) | undefined
+  const push = (event: SearchEvent): void => {
+    queue.push(event)
+    wake?.()
+  }
+
+  const facets: SearchFacets = { languages: {}, repos: {}, paths: {} }
+  let totalFiles = 0
+  let reserved = 0
+
+  const searchRepo = async (repo: SearchRepo): Promise<void> => {
+    const expr = specializePlan(plan.expr, filter => holds(repo, filter))
+    if (expr.op === 'none') return
+    const ref = repo.ref ?? 'HEAD'
+
+    const files = await listMatchingFiles({ gitDir: repo.gitDir, expr, ref, signal: stop })
+    if (stop.aborted) return
+    if (files.isErr()) {
+      push({ type: 'repo-error', repo: repo.name, error: toSearchRepoError(files.error) })
+      return
+    }
+
+    for (const path of files.value) {
+      totalFiles++
+      count(facets.repos, repo.name)
+      count(facets.paths, path.includes('/') ? path.slice(0, path.indexOf('/')) : '')
+      const language = languageOf(path)
+      if (language) count(facets.languages, language)
+    }
+
+    const shown = files.value.slice(0, Math.max(0, limit - reserved))
+    if (shown.length === 0) return
+    reserved += shown.length
+
+    const lines = plan.highlight.length
+      ? await collectLines({ repo, ref, files: shown, patterns: plan.highlight, context, maxMatchesPerFile, signal: stop })
+      : Result.ok(new Map<string, SearchLine[]>())
+    if (stop.aborted) return
+    if (lines.isErr()) {
+      reserved -= shown.length
+      push({ type: 'repo-error', repo: repo.name, error: toSearchRepoError(lines.error) })
+      return
+    }
+
+    for (const path of shown) {
+      push({ type: 'file', repo: repo.name, path, language: languageOf(path), lines: lines.value.get(path) ?? [] })
+    }
+  }
+
+  let next = 0
+  let running = true
+  const workers = Array.from({ length: Math.min(concurrency, repos.length) }, async () => {
+    while (next < repos.length && !stop.aborted) await searchRepo(repos[next++]!)
+  })
+  const all = Promise.all(workers).finally(() => {
+    running = false
+    wake?.()
+  })
+
+  try {
+    for (;;) {
+      const event = queue.shift()
+      if (event) {
+        yield event
+        continue
+      }
+      if (!running) break
+      await new Promise<void>(resolve => (wake = resolve))
+      wake = undefined
+    }
+
+    const stopped = options.signal?.aborted ? 'aborted' : timeout?.aborted ? 'timeout' : undefined
+    yield { type: 'done', totalFiles, facets, truncated: totalFiles > reserved, ...(stopped ? { stopped } : {}) }
+  } finally {
+    finished.abort()
+    await all
+  }
+}
