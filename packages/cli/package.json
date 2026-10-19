@@ -1,0 +1,12 @@
+{
+  "name": "@bundle-grep/cli",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "bin": {
+    "bundle-grep": "./src/main.ts"
+  },
+  "dependencies": {
+    "@bundle-grep/core": "workspace:*"
+  }
+}
