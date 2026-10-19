@@ -5,4 +5,18 @@
  * @module
  */
 
-export {}
+export { parseQuery } from './query/parse-query'
+export { QueryParseError } from './query/query.errors'
+export type {
+  AndNode,
+  FilterKey,
+  FilterNode,
+  IsValue,
+  MatchField,
+  MatchNode,
+  NotNode,
+  OrNode,
+  Pattern,
+  QueryNode,
+  Span,
+} from './query/query.types'

@@ -1,0 +1,243 @@
+import { describe, expect, test } from 'bun:test'
+
+import { parseQuery } from '../../src/query/parse-query'
+import type { QueryNode } from '../../src/query/query.types'
+
+/** Parses and drops spans, so tree shapes can be compared directly. */
+function tree(query: string): unknown {
+  return strip(parseQuery(query).unwrap())
+}
+
+function strip(node: QueryNode): unknown {
+  switch (node.type) {
+    case 'match':
+      return { match: node.field, ...node.pattern }
+    case 'filter':
+      return { filter: node.key, value: node.value }
+    case 'not':
+      return { not: strip(node.child) }
+    case 'and':
+    case 'or':
+      return { [node.type]: node.children.map(strip) }
+  }
+}
+
+function error(query: string): { message: string; offset: number; length: number } {
+  const result = parseQuery(query)
+  if (result.isOk()) throw new Error(`expected "${query}" to fail`)
+  return { message: result.error.message, ...result.error.span }
+}
+
+const term = (value: string): unknown => ({ match: 'any', kind: 'literal', value })
+
+describe('terms', () => {
+  test('a bare word', () => {
+    expect(tree('useState')).toEqual(term('useState'))
+  })
+
+  test('a quoted phrase keeps whitespace', () => {
+    expect(tree('"sparse index"')).toEqual(term('sparse index'))
+  })
+
+  test('escaped quotes and backslashes inside a phrase', () => {
+    expect(tree('"say \\"hi\\" \\\\ bye"')).toEqual(term('say "hi" \\ bye'))
+  })
+
+  test('a quoted keyword is a literal', () => {
+    expect(tree('"OR"')).toEqual(term('OR'))
+  })
+
+  test('lowercase keywords are terms', () => {
+    expect(tree('not')).toEqual(term('not'))
+  })
+
+  test('a regex', () => {
+    expect(tree('/sparse.*index/')).toEqual({ match: 'any', kind: 'regex', source: 'sparse.*index' })
+  })
+
+  test('an escaped slash inside a regex', () => {
+    expect(tree('/^src\\/.*\\.ts$/')).toEqual({ match: 'any', kind: 'regex', source: '^src/.*\\.ts$' })
+  })
+
+  test('other escapes in a regex are passed through', () => {
+    expect(tree('/\\d+\\s/')).toEqual({ match: 'any', kind: 'regex', source: '\\d+\\s' })
+  })
+
+  test('a slash inside a bare word is not a regex', () => {
+    expect(tree('a/b')).toEqual(term('a/b'))
+  })
+
+  test('balanced parentheses stay inside a word', () => {
+    expect(tree('getValue()')).toEqual(term('getValue()'))
+  })
+
+  test('an opening parenthesis inside a word is literal', () => {
+    expect(tree('getValue(')).toEqual(term('getValue('))
+  })
+
+  test('a leading dash on a bare word is part of the word', () => {
+    expect(tree('-foo')).toEqual(term('-foo'))
+  })
+
+  test('an unknown qualifier is a term', () => {
+    expect(tree('http://example.com')).toEqual(term('http://example.com'))
+  })
+})
+
+describe('qualifiers', () => {
+  test('content: matches only contents', () => {
+    expect(tree('content:README')).toEqual({ match: 'content', kind: 'literal', value: 'README' })
+  })
+
+  test('path: matches only paths', () => {
+    expect(tree('path:src/*.ts')).toEqual({ match: 'path', kind: 'literal', value: 'src/*.ts' })
+  })
+
+  test('path: takes a regex', () => {
+    expect(tree('path:/\\.test\\.ts$/')).toEqual({ match: 'path', kind: 'regex', source: '\\.test\\.ts$' })
+  })
+
+  test('a quoted qualifier value', () => {
+    expect(tree('language:"Common Lisp"')).toEqual({ filter: 'language', value: 'Common Lisp' })
+  })
+
+  test.each(['repo', 'org', 'user', 'language'] as const)('%s: is a filter', key => {
+    expect(tree(`${key}:value`)).toEqual({ filter: key, value: 'value' })
+  })
+
+  test.each(['fork', 'archived'])('is:%s', value => {
+    expect(tree(`is:${value}`)).toEqual({ filter: 'is', value })
+  })
+
+  test('a dash negates a qualifier', () => {
+    expect(tree('-path:vendor')).toEqual({ not: { match: 'path', kind: 'literal', value: 'vendor' } })
+  })
+
+  test('qualifier keys are case-insensitive', () => {
+    expect(tree('Language:TypeScript')).toEqual({ filter: 'language', value: 'TypeScript' })
+  })
+})
+
+describe('boolean operators', () => {
+  test('adjacent terms are ANDed', () => {
+    expect(tree('foo bar')).toEqual({ and: [term('foo'), term('bar')] })
+  })
+
+  test('an explicit AND', () => {
+    expect(tree('foo AND bar')).toEqual({ and: [term('foo'), term('bar')] })
+  })
+
+  test('OR', () => {
+    expect(tree('foo OR bar')).toEqual({ or: [term('foo'), term('bar')] })
+  })
+
+  test('NOT', () => {
+    expect(tree('foo NOT bar')).toEqual({ and: [term('foo'), { not: term('bar') }] })
+  })
+
+  test('AND binds tighter than OR', () => {
+    expect(tree('a OR b c')).toEqual({ or: [term('a'), { and: [term('b'), term('c')] }] })
+  })
+
+  test('NOT binds tighter than AND', () => {
+    expect(tree('NOT a b')).toEqual({ and: [{ not: term('a') }, term('b')] })
+  })
+
+  test('chains flatten', () => {
+    expect(tree('a OR b OR c')).toEqual({ or: [term('a'), term('b'), term('c')] })
+    expect(tree('a b AND c')).toEqual({ and: [term('a'), term('b'), term('c')] })
+  })
+
+  test('parentheses group', () => {
+    expect(tree('(a OR b) c')).toEqual({ and: [{ or: [term('a'), term('b')] }, term('c')] })
+  })
+
+  test('NOT applies to a group', () => {
+    expect(tree('NOT (a OR b)')).toEqual({ not: { or: [term('a'), term('b')] } })
+  })
+
+  test('a closing parenthesis ends a word inside a group', () => {
+    expect(tree('(a OR foo)')).toEqual({ or: [term('a'), term('foo')] })
+  })
+
+  test('a word with balanced parentheses inside a group', () => {
+    expect(tree('(foo() OR bar)')).toEqual({ or: [term('foo()'), term('bar')] })
+  })
+
+  test('qualifiers combine with terms', () => {
+    expect(tree('useState language:typescript NOT path:test')).toEqual({
+      and: [term('useState'), { filter: 'language', value: 'typescript' }, { not: { match: 'path', kind: 'literal', value: 'test' } }],
+    })
+  })
+
+  test('surrounding whitespace is ignored', () => {
+    expect(tree('  foo  ')).toEqual(term('foo'))
+  })
+})
+
+describe('spans', () => {
+  test('a term covers its source', () => {
+    expect(parseQuery('foo "a b"').unwrap()).toMatchObject({
+      children: [{ span: { offset: 0, length: 3 } }, { span: { offset: 4, length: 5 } }],
+    })
+  })
+
+  test('a negated qualifier covers the key and value, not the dash', () => {
+    expect(parseQuery('-path:vendor').unwrap()).toMatchObject({ child: { span: { offset: 1, length: 11 } } })
+  })
+})
+
+describe('errors', () => {
+  test('an empty query', () => {
+    expect(error('   ')).toEqual({ message: 'Query is empty', offset: 3, length: 0 })
+  })
+
+  test('an unterminated phrase', () => {
+    expect(error('foo "bar')).toEqual({ message: 'Unterminated quoted phrase', offset: 4, length: 4 })
+  })
+
+  test('an unterminated regex', () => {
+    expect(error('/abc')).toEqual({ message: 'Unterminated regular expression', offset: 0, length: 4 })
+  })
+
+  test('an empty regex', () => {
+    expect(error('//')).toEqual({ message: 'Regular expression is empty', offset: 0, length: 2 })
+  })
+
+  test('an unclosed group', () => {
+    expect(error('(a OR b')).toEqual({ message: 'Missing closing parenthesis', offset: 0, length: 1 })
+  })
+
+  test('an unmatched closing parenthesis', () => {
+    expect(error('a)')).toEqual({ message: 'Unmatched closing parenthesis', offset: 1, length: 1 })
+  })
+
+  test('an empty group', () => {
+    expect(error('a ()')).toEqual({ message: 'Expected a search term', offset: 3, length: 1 })
+  })
+
+  test('a dangling operator', () => {
+    expect(error('a OR')).toEqual({ message: 'Expected a search term after OR', offset: 4, length: 0 })
+    expect(error('NOT')).toEqual({ message: 'Expected a search term after NOT', offset: 3, length: 0 })
+  })
+
+  test('a leading operator', () => {
+    expect(error('OR a')).toEqual({ message: 'Expected a search term before OR', offset: 0, length: 2 })
+  })
+
+  test('a qualifier without a value', () => {
+    expect(error('path:')).toEqual({ message: 'Qualifier path: needs a value', offset: 0, length: 5 })
+  })
+
+  test('an unsupported is: value', () => {
+    expect(error('is:vendored')).toEqual({
+      message: 'Unsupported value for is: "vendored" (expected fork or archived)',
+      offset: 3,
+      length: 8,
+    })
+  })
+
+  test('a filter given a regex', () => {
+    expect(error('repo:/abc/')).toEqual({ message: 'Qualifier repo: does not accept a regular expression', offset: 5, length: 5 })
+  })
+})
