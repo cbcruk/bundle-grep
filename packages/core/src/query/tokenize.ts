@@ -18,7 +18,11 @@ const FILTER_KEYS: ReadonlySet<string> = new Set<FilterKey>(['repo', 'org', 'use
 
 const IS_VALUES: ReadonlySet<string> = new Set<IsValue>(['fork', 'archived'])
 
+const UNSUPPORTED_KEYS: ReadonlySet<string> = new Set(['symbol', 'enterprise'])
+
 const QUALIFIER = /^(-?)([A-Za-z]+):/
+
+const KEYWORD_BEFORE_GROUP = /^(AND|OR|NOT)(?=\()/
 
 interface Scanned<T> {
   value: T
@@ -44,7 +48,10 @@ function scanQuoted(query: string, start: number): ScanResult<string> {
   let value = ''
   for (let i = start + 1; i < query.length; i++) {
     const char = query[i]!
-    if (char === '"') return Result.ok({ value, end: i + 1 })
+    if (char === '"') {
+      if (value === '') return fail('Quoted phrase is empty', start, i + 1)
+      return Result.ok({ value, end: i + 1 })
+    }
     if (char === '\\' && (query[i + 1] === '"' || query[i + 1] === '\\')) {
       value += query[++i]
       continue
@@ -97,13 +104,16 @@ function scanWord(query: string, start: number): Scanned<string> {
 /** Reads a pattern, as a phrase, a regex, or a bare word depending on its first character. */
 function scanPattern(query: string, start: number): ScanResult<Pattern> {
   if (query[start] === '"') {
-    return scanQuoted(query, start).map(({ value, end }) => ({ value: { kind: 'literal', value }, end }))
+    return scanQuoted(query, start).map(({ value, end }) => ({
+      value: { kind: 'literal', value, quoted: true },
+      end,
+    }))
   }
   if (query[start] === '/') {
     return scanRegex(query, start).map(({ value, end }) => ({ value: { kind: 'regex', source: value }, end }))
   }
   const { value, end } = scanWord(query, start)
-  return Result.ok({ value: { kind: 'literal', value }, end })
+  return Result.ok({ value: { kind: 'literal', value, quoted: false }, end })
 }
 
 /** Reads a known qualifier whose key starts at `keyStart` and whose value starts at `valueStart`. */
@@ -151,8 +161,19 @@ function scanToken(query: string, start: number): ScanResult<Token> {
     return Result.ok({ value: { kind, span: span(start, start + 1) }, end: start + 1 })
   }
 
+  // `NOT(a)` and `a OR(b)` would otherwise read as words that opened their own parenthesis.
+  const keyword = KEYWORD_BEFORE_GROUP.exec(query.slice(start))?.[1]
+  if (keyword) {
+    const end = start + keyword.length
+    return Result.ok({ value: { kind: 'keyword', keyword: keyword as Keyword, span: span(start, end) }, end })
+  }
+
   const qualifier = QUALIFIER.exec(query.slice(start))
   const key = qualifier?.[2]?.toLowerCase()
+  if (qualifier && key && UNSUPPORTED_KEYS.has(key)) {
+    const keyStart = start + qualifier[1]!.length
+    return fail(`Qualifier ${key}: is not supported`, keyStart, start + qualifier[0].length)
+  }
   if (qualifier && key && (key in MATCH_KEYS || FILTER_KEYS.has(key))) {
     const negated = qualifier[1] === '-'
     const keyStart = start + (negated ? 1 : 0)

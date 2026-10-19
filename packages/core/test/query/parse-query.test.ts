@@ -28,7 +28,9 @@ function error(query: string): { message: string; offset: number; length: number
   return { message: result.error.message, ...result.error.span }
 }
 
-const term = (value: string): unknown => ({ match: 'any', kind: 'literal', value })
+const term = (value: string, quoted = false): unknown => ({ match: 'any', kind: 'literal', value, quoted })
+
+const pathLiteral = (value: string, quoted = false): unknown => ({ match: 'path', kind: 'literal', value, quoted })
 
 describe('terms', () => {
   test('a bare word', () => {
@@ -36,15 +38,15 @@ describe('terms', () => {
   })
 
   test('a quoted phrase keeps whitespace', () => {
-    expect(tree('"sparse index"')).toEqual(term('sparse index'))
+    expect(tree('"sparse index"')).toEqual(term('sparse index', true))
   })
 
   test('escaped quotes and backslashes inside a phrase', () => {
-    expect(tree('"say \\"hi\\" \\\\ bye"')).toEqual(term('say "hi" \\ bye'))
+    expect(tree('"say \\"hi\\" \\\\ bye"')).toEqual(term('say "hi" \\ bye', true))
   })
 
   test('a quoted keyword is a literal', () => {
-    expect(tree('"OR"')).toEqual(term('OR'))
+    expect(tree('"OR"')).toEqual(term('OR', true))
   })
 
   test('lowercase keywords are terms', () => {
@@ -86,11 +88,15 @@ describe('terms', () => {
 
 describe('qualifiers', () => {
   test('content: matches only contents', () => {
-    expect(tree('content:README')).toEqual({ match: 'content', kind: 'literal', value: 'README' })
+    expect(tree('content:README')).toEqual({ match: 'content', kind: 'literal', value: 'README', quoted: false })
   })
 
   test('path: matches only paths', () => {
-    expect(tree('path:src/*.ts')).toEqual({ match: 'path', kind: 'literal', value: 'src/*.ts' })
+    expect(tree('path:src/*.ts')).toEqual(pathLiteral('src/*.ts'))
+  })
+
+  test('a quoted path: records that it was quoted, so globs can be turned off', () => {
+    expect(tree('path:"file?"')).toEqual(pathLiteral('file?', true))
   })
 
   test('path: takes a regex', () => {
@@ -110,7 +116,7 @@ describe('qualifiers', () => {
   })
 
   test('a dash negates a qualifier', () => {
-    expect(tree('-path:vendor')).toEqual({ not: { match: 'path', kind: 'literal', value: 'vendor' } })
+    expect(tree('-path:vendor')).toEqual({ not: pathLiteral('vendor') })
   })
 
   test('qualifier keys are case-insensitive', () => {
@@ -166,8 +172,21 @@ describe('boolean operators', () => {
 
   test('qualifiers combine with terms', () => {
     expect(tree('useState language:typescript NOT path:test')).toEqual({
-      and: [term('useState'), { filter: 'language', value: 'typescript' }, { not: { match: 'path', kind: 'literal', value: 'test' } }],
+      and: [term('useState'), { filter: 'language', value: 'typescript' }, { not: pathLiteral('test') }],
     })
+  })
+
+  test('a keyword directly before a group', () => {
+    expect(tree('NOT(a OR b)')).toEqual({ not: { or: [term('a'), term('b')] } })
+    expect(tree('a OR(b)')).toEqual({ or: [term('a'), term('b')] })
+  })
+
+  test('a word directly before a group keeps its parenthesis, so the group cannot close', () => {
+    expect(error('x(a OR b)')).toEqual({ message: 'Unmatched closing parenthesis', offset: 8, length: 1 })
+  })
+
+  test('nesting up to the limit', () => {
+    expect(tree(`${'('.repeat(256)}a${')'.repeat(256)}`)).toEqual(term('a'))
   })
 
   test('surrounding whitespace is ignored', () => {
@@ -202,6 +221,23 @@ describe('errors', () => {
 
   test('an empty regex', () => {
     expect(error('//')).toEqual({ message: 'Regular expression is empty', offset: 0, length: 2 })
+  })
+
+  test('an empty phrase', () => {
+    expect(error('""')).toEqual({ message: 'Quoted phrase is empty', offset: 0, length: 2 })
+  })
+
+  test('nesting past the limit fails instead of overflowing the stack', () => {
+    expect(error(`${'('.repeat(20000)}a${')'.repeat(20000)}`)).toEqual({
+      message: 'Query is nested more than 256 levels deep',
+      offset: 256,
+      length: 1,
+    })
+    expect(error(`${'NOT '.repeat(20000)}a`)).toMatchObject({ message: 'Query is nested more than 256 levels deep' })
+  })
+
+  test('a GitHub qualifier that is not supported', () => {
+    expect(error('-symbol:foo')).toEqual({ message: 'Qualifier symbol: is not supported', offset: 1, length: 7 })
   })
 
   test('an unclosed group', () => {
