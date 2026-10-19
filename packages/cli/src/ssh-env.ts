@@ -4,6 +4,9 @@
  * @module
  */
 
+import { Result } from 'better-result'
+import { tmpdir } from 'node:os'
+
 /**
  * Decides the extra git environment that makes ssh fail instead of prompting
  * for a passphrase or an unknown host key.
@@ -24,8 +27,15 @@ export function batchSshEnv(
   return { GIT_SSH_COMMAND: 'ssh -o BatchMode=yes' }
 }
 
-/** Says whether the user's git config sets `core.sshCommand`. */
+/**
+ * Says whether the user's global or system git config sets `core.sshCommand`.
+ *
+ * Runs outside any repository, as the fetch's own bare cache has no such
+ * setting of its own; a git that cannot run counts as not set.
+ */
 export function hasSshCommandConfig(): boolean {
-  const config = Bun.spawnSync(['git', 'config', '--get', 'core.sshCommand'], { stdout: 'pipe', stderr: 'ignore' })
-  return config.exitCode === 0 && config.stdout.toString().trim() !== ''
+  const config = Result.try(() =>
+    Bun.spawnSync(['git', 'config', '--get', 'core.sshCommand'], { cwd: tmpdir(), env: process.env, stdout: 'pipe', stderr: 'ignore' }),
+  )
+  return config.isOk() && config.value.exitCode === 0 && config.value.stdout.toString().trim() !== ''
 }

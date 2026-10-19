@@ -38,3 +38,15 @@ export function stylesFor(color: boolean): Styles {
 export function printable(text: string): string {
   return text.replace(/\p{Cc}/gu, char => (char === '\t' ? char : '\ufffd'))
 }
+
+/**
+ * Makes a message from git or `gh` {@linkcode printable}, keeping its line
+ * breaks as indented continuation lines and dropping trailing blank lines.
+ */
+export function printableMessage(message: string, indent = '    '): string {
+  return message
+    .trimEnd()
+    .split(/\r?\n|\r/)
+    .map(printable)
+    .join(`\n${indent}`)
+}

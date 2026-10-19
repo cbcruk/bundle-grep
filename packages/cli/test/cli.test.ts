@@ -196,6 +196,14 @@ describe('bundle-grep', () => {
     expect(synced).toEqual({ code: 0, stdout: `unchanged ${fixture.root.split('/').at(-1)}/repo\n`, stderr: '' })
   })
 
+  test('sync reads a bare name as a GitHub owner even when a directory has that name', async () => {
+    const cwd = process.cwd()
+    mkdirSync(join(fixture.root, 'acme'), { recursive: true })
+    process.chdir(fixture.root)
+    const synced = await cli('sync', 'acme').finally(() => process.chdir(cwd))
+    expect(synced.stdout).toBe('unchanged acme/app\nunchanged acme/fork\n')
+  })
+
   test('sync looks GitHub URLs up with gh, keeping the URL, and falls back without gh', async () => {
     const viewed = await cli('sync', 'https://github.com/other/tool')
     expect(viewed).toEqual({ code: 1, stdout: '', stderr: expect.stringContaining('failed    Other/tool:') })
@@ -220,6 +228,12 @@ describe('bundle-grep', () => {
     const found = await cli('search', '-is:fork', '-is:archived', 'useState', 'org:acme', '-C', '0')
     expect(found.code).toBe(0)
     expect(found.stdout).toStartWith('acme/app\n')
+    for (const word of ['-hooks', '-Config', '-C1x']) {
+      const searched = await cli('search', 'useState', word, 'repo:acme/app')
+      expect(searched.code).toBeLessThan(2)
+      expect(searched.stderr).not.toContain('Usage:')
+    }
+    expect((await cli('search', '-C1', 'export repo:acme/app')).stdout).toContain('src/counter.ts-2-')
     expect((await cli('search', '--nope', 'x')).code).toBe(2)
     expect((await cli('search', '--', '--x')).stderr).toBe('0 files in 0 repositories\n')
   })
