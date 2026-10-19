@@ -64,7 +64,8 @@ function lines(output: GitOutput): string[] {
  *
  * Without metadata, as when only the bundle was copied over, `HEAD` points at
  * a branch on the commit the bundle's `HEAD` is on, preferring `main` and then
- * `master`. A bundle records no symbolic refs, so with several branches on
+ * `master`; a bundle without branches is then an error, and the cache is left
+ * alone. A bundle records no symbolic refs, so with several branches on
  * that commit this may not be the branch sync used; the files searched are
  * the same.
  *
@@ -89,7 +90,10 @@ export function restoreRepo(
     const mismatch = (path: string, message: string): Result<never, ArchiveMismatchError> =>
       Result.err(new ArchiveMismatchError({ path, message }))
     const empty = async (): Promise<Result<RestoreOutcome, RestoreError>> => {
-      const removed = await fileSystem(paths.gitDir, () => rm(paths.gitDir, { recursive: true, force: true }))
+      const isRepository = existsSync(join(paths.gitDir, 'HEAD'))
+      const removed = await fileSystem(paths.gitDir, () =>
+        isRepository ? rm(paths.gitDir, { recursive: true, force: true }) : Promise.resolve(),
+      )
       return removed.map(() => ({ status: 'empty', paths, defaultBranch: null, head: null }))
     }
 
@@ -109,7 +113,7 @@ export function restoreRepo(
         listed.flatMap(line => (line.startsWith(`${bundleHead} refs/heads/`) ? branchesOf(line) : [])),
       ) ??
       chooseHead(null, branchesOf(bundleRefs))
-    if (defaultBranch === undefined) return done(yield* Result.await(empty()))
+    if (defaultBranch === undefined) return mismatch(paths.bundle, `${paths.bundle} holds no branches to restore`)
     const symref = `refs/heads/${defaultBranch}`
 
     if (metadata) {

@@ -174,6 +174,24 @@ describe('restoreRepo', () => {
     expect(runGit(outcome.paths.gitDir, ['for-each-ref', '--format=%(refname)'])).toBe('refs/heads/main')
   })
 
+  test('refuses a bundle without branches or metadata, keeping the cache', async () => {
+    using fixture = createFixtureRepo(FIRST)
+    const layout = layoutOf(fixture)
+    const synced = (await syncRepo(targetOf(fixture), layout)).unwrap()
+    rmSync(synced.paths.metadata)
+
+    for (const args of [['HEAD'], ['--remotes'], ['--tags']]) {
+      if (args[0] === '--remotes') fixture.git('update-ref', 'refs/remotes/origin/x', 'HEAD')
+      if (args[0] === '--tags') fixture.git('tag', 'v1')
+      fixture.git('bundle', 'create', synced.paths.bundle, ...args)
+
+      const result = await restoreRepo(REPO, layout)
+
+      expect(result.isErr() && result.error.message).toContain('holds no branches')
+      expect(runGit(synced.paths.gitDir, ['rev-parse', 'HEAD'])).toBe(synced.metadata.head ?? '')
+    }
+  })
+
   test('fetches again when the cache cannot resolve HEAD despite matching refs', async () => {
     using fixture = createFixtureRepo(FIRST)
     const layout = layoutOf(fixture)
