@@ -6,7 +6,7 @@
 
 import { Result } from 'better-result'
 import { existsSync } from 'node:fs'
-import { mkdir, stat } from 'node:fs/promises'
+import { mkdir, rm, stat } from 'node:fs/promises'
 import { dirname, join } from 'node:path'
 
 import { ArchiveMismatchError } from '../archive/archive.errors'
@@ -19,6 +19,9 @@ import type { GitOutput } from '../git/git.types'
 import { branchesOf, chooseHead, refsDigest } from '../git/refs'
 import { runGit } from '../git/run-git'
 import type { RestoreError, RestoreEvent, RestoreOptions, RestoreOutcome } from './restore.types'
+
+/** The refs sync keeps, and so the only ones restored. */
+const KEPT_REFS = /^refs\/(heads|tags)\//
 
 function refnameOf(line: string): string {
   return line.slice(line.indexOf(' ') + 1)
@@ -45,15 +48,25 @@ function lines(output: GitOutput): string[] {
  * Restores one repository's bare repository from its bundle, so it can be searched.
  *
  * The cache at `cacheDir/<owner>/<name>.git` is created when missing and
- * otherwise brought to exactly the bundle's refs: refs the bundle lacks are
- * deleted. Nothing is fetched when the cache already matches. The cache is
- * derived data, so deleting it and restoring again is always safe.
+ * otherwise brought to exactly the bundle's branches and tags, the refs sync
+ * keeps: ones the bundle lacks are deleted, and other refs in a bundle are
+ * ignored. Nothing is fetched when the cache's refs and `HEAD` already match.
+ * The cache is derived data, so deleting it and restoring again is always
+ * safe; that is also the way to repair a cache whose objects were damaged,
+ * since matching refs are all that is compared.
  *
- * When the metadata is present, the bundle must hold exactly the refs and
- * size it records, and `HEAD` is pointed at its default branch; a mismatch
- * fails before the cache is touched. Without metadata, as when only the
- * bundle was copied over, `HEAD` points at the branch the bundle's `HEAD`
- * matches, preferring `main` and then `master`.
+ * When the metadata is present it is trusted over the bundle: the bundle must
+ * hold exactly the refs and size it records, and `HEAD` is pointed at its
+ * default branch; a mismatch fails before the cache is touched. Metadata that
+ * records no `HEAD` means the repository had no branches when last synced, so
+ * the result is `empty` and any cache of it is removed, even if an older
+ * bundle is still beside it.
+ *
+ * Without metadata, as when only the bundle was copied over, `HEAD` points at
+ * a branch on the commit the bundle's `HEAD` is on, preferring `main` and then
+ * `master`. A bundle records no symbolic refs, so with several branches on
+ * that commit this may not be the branch sync used; the files searched are
+ * the same.
  *
  * @returns What restoring did, or the first failure. A corrupted bundle fails
  * with the {@linkcode GitError} of the fetch that reads it.
@@ -73,22 +86,21 @@ export function restoreRepo(
   return Result.gen(async function* () {
     const paths = yield* archivePaths(options, repo.owner, repo.name)
     const metadata = yield* Result.await(readMetadata(paths.metadata))
-    const mismatch = (message: string): Result<never, ArchiveMismatchError> =>
-      Result.err(new ArchiveMismatchError({ path: paths.bundle, message }))
+    const mismatch = (path: string, message: string): Result<never, ArchiveMismatchError> =>
+      Result.err(new ArchiveMismatchError({ path, message }))
+    const empty = async (): Promise<Result<RestoreOutcome, RestoreError>> => {
+      const removed = await fileSystem(paths.gitDir, () => rm(paths.gitDir, { recursive: true, force: true }))
+      return removed.map(() => ({ status: 'empty', paths, defaultBranch: null, head: null }))
+    }
 
-    if (!existsSync(paths.bundle)) {
-      if (metadata?.head === null) return done({ status: 'empty', paths, defaultBranch: null, head: null })
-      return mismatch(`${paths.bundle} is missing`)
-    }
-    if (metadata?.head === null) {
-      return mismatch(`${paths.metadata} records an empty repository, but ${paths.bundle} exists; sync it again`)
-    }
+    if (metadata?.head === null) return done(yield* Result.await(empty()))
+    if (!existsSync(paths.bundle)) return mismatch(paths.bundle, `${paths.bundle} is missing`)
 
     const inArchive = (args: string[]): Promise<Result<GitOutput, GitError>> =>
       runGit(args, { cwd: dirname(paths.bundle), signal: options.signal })
     const listed = lines(yield* Result.await(inArchive(['bundle', 'list-heads', paths.bundle])))
     const bundleHead = listed.find(line => refnameOf(line) === 'HEAD')?.split(' ')[0]
-    const bundleRefs = sortRefs(listed.filter(line => refnameOf(line) !== 'HEAD'))
+    const bundleRefs = sortRefs(listed.filter(line => KEPT_REFS.test(refnameOf(line))))
 
     const defaultBranch =
       metadata?.defaultBranch ??
@@ -97,36 +109,50 @@ export function restoreRepo(
         listed.flatMap(line => (line.startsWith(`${bundleHead} refs/heads/`) ? branchesOf(line) : [])),
       ) ??
       chooseHead(null, branchesOf(bundleRefs))
-    if (defaultBranch === undefined) return mismatch(`${paths.bundle} holds no branches`)
+    if (defaultBranch === undefined) return done(yield* Result.await(empty()))
     const symref = `refs/heads/${defaultBranch}`
 
     if (metadata) {
       const { size } = yield* Result.await(fileSystem(paths.bundle, () => stat(paths.bundle)))
       if (refsDigest(bundleRefs, symref) !== metadata.refsDigest || size !== metadata.bundleSize) {
-        return mismatch(`${paths.bundle} does not hold what ${paths.metadata} records; sync it again`)
+        return mismatch(paths.bundle, `${paths.bundle} does not hold what ${paths.metadata} records; sync it again`)
       }
     }
 
     const git = (args: string[], allowExitCodes?: number[]): Promise<Result<GitOutput, GitError>> =>
       runGit(args, { cwd: paths.gitDir, signal: options.signal, allowExitCodes })
+    const resolveHead = async (): Promise<Result<string | undefined, GitError>> => {
+      const resolved = await git(['rev-parse', '--verify', '--quiet', 'HEAD^{commit}'], [1])
+      return resolved.map(output => (output.exitCode === 0 ? output.stdout.toString('utf8').trim() : undefined))
+    }
+
     const cached = existsSync(join(paths.gitDir, 'HEAD'))
     if (cached) {
-      const refs = (yield* Result.await(git(['for-each-ref', '--format=%(objectname) %(refname)']))).stdout
+      const refs = yield* Result.await(git(['for-each-ref', '--format=%(objectname) %(refname)', 'refs/heads', 'refs/tags']))
       const head = (yield* Result.await(git(['symbolic-ref', '--quiet', 'HEAD'], [1]))).stdout.toString('utf8').trim()
-      if (refs.toString('utf8') === bundleRefs && head === symref) {
-        const resolved = yield* Result.await(git(['rev-parse', '--verify', 'HEAD^{commit}']))
-        return done({ status: 'unchanged', paths, defaultBranch, head: resolved.stdout.toString('utf8').trim() })
+      if (refs.stdout.toString('utf8') === bundleRefs && head === symref) {
+        const resolved = yield* Result.await(resolveHead())
+        if (resolved !== undefined) return done({ status: 'unchanged', paths, defaultBranch, head: resolved })
       }
     }
 
     yield* Result.await(fileSystem(paths.gitDir, () => mkdir(paths.gitDir, { recursive: true })))
     yield* Result.await(git(['init', '--quiet', '--bare', '.']))
-    yield* Result.await(git(['fetch', '--quiet', '--prune', '--no-tags', '--', paths.bundle, '+refs/*:refs/*']))
+    yield* Result.await(
+      git([
+        'fetch',
+        '--quiet',
+        '--prune',
+        '--no-tags',
+        '--',
+        paths.bundle,
+        '+refs/heads/*:refs/heads/*',
+        '+refs/tags/*:refs/tags/*',
+      ]),
+    )
     yield* Result.await(git(['symbolic-ref', 'HEAD', symref]))
-    const head = (yield* Result.await(git(['rev-parse', '--verify', 'HEAD^{commit}']))).stdout.toString('utf8').trim()
-    if (metadata && head !== metadata.head) {
-      return mismatch(`${paths.gitDir} resolves HEAD to ${head}, but ${paths.metadata} records ${metadata.head}`)
-    }
+    const head = yield* Result.await(resolveHead())
+    if (head === undefined) return mismatch(paths.gitDir, `${paths.gitDir} has no commit at ${symref}`)
     return done({ status: cached ? 'updated' : 'created', paths, defaultBranch, head })
   })
 }

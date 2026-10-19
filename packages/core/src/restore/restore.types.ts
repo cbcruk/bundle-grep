@@ -20,7 +20,7 @@ export interface RestoreOptions extends ArchiveLayout {
  * - `created`: there was no cache, and now there is one.
  * - `updated`: the cache differed from the bundle, and now matches it.
  * - `unchanged`: the cache already matched the bundle.
- * - `empty`: the metadata records an empty repository, so there is nothing to restore.
+ * - `empty`: the repository has no branches, so there is nothing to search; any cache of it was removed.
  */
 export type RestoreStatus = 'created' | 'updated' | 'unchanged' | 'empty'
 

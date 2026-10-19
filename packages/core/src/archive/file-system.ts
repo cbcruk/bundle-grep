@@ -15,7 +15,7 @@ export function fileSystem<T>(path: string, run: () => Promise<T>): Promise<Resu
     catch: cause =>
       new FileSystemError({
         path,
-        message: `Could not update ${path}: ${cause instanceof Error ? cause.message : String(cause)}`,
+        message: `Could not access ${path}: ${cause instanceof Error ? cause.message : String(cause)}`,
       }),
   })
 }

@@ -16,18 +16,22 @@ import { fileSystem } from './file-system'
 
 const ARCHIVED_FILE = /^(.+)\.(bundle|json)$/
 
-async function entriesOf(path: string): Promise<Result<string[], FileSystemError>> {
+async function entriesOf(path: string, kind: 'directory' | 'file'): Promise<Result<string[], FileSystemError>> {
   if (!existsSync(path)) return Result.ok([])
   const entries = await fileSystem(path, () => readdir(path, { withFileTypes: true }))
-  return entries.map(found => found.filter(entry => entry.isDirectory() || entry.isFile()).map(entry => entry.name))
+  return entries.map(found =>
+    found.filter(entry => (kind === 'directory' ? entry.isDirectory() : entry.isFile())).map(entry => entry.name),
+  )
 }
 
 /**
  * Lists the repositories in an archive, as every `<owner>/<name>.bundle` or `<owner>/<name>.json`.
  *
  * A repository with only metadata is listed too: it was empty when synced.
- * Names that {@linkcode archivePaths} would reject, such as temporary files,
- * are skipped. A missing archive directory holds no repositories.
+ * Only regular files inside directories count, so stray files such as
+ * `.DS_Store` and symbolic links are skipped, as are names that
+ * {@linkcode archivePaths} would reject, such as temporary files. A missing
+ * archive directory holds no repositories.
  *
  * @returns The repositories sorted by owner and name, or a
  * {@linkcode FileSystemError} when a directory cannot be read.
@@ -46,8 +50,8 @@ async function entriesOf(path: string): Promise<Result<string[], FileSystemError
 export async function listArchive(layout: ArchiveLayout): Promise<Result<ArchiveEntry[], FileSystemError>> {
   return Result.gen(async function* () {
     const found = new Map<string, ArchiveEntry>()
-    for (const owner of (yield* Result.await(entriesOf(layout.archiveDir))).sort()) {
-      for (const file of yield* Result.await(entriesOf(join(layout.archiveDir, owner)))) {
+    for (const owner of (yield* Result.await(entriesOf(layout.archiveDir, 'directory'))).sort()) {
+      for (const file of yield* Result.await(entriesOf(join(layout.archiveDir, owner), 'file'))) {
         const name = ARCHIVED_FILE.exec(file)?.[1]
         if (name === undefined) continue
         const paths = archivePaths(layout, owner, name)
