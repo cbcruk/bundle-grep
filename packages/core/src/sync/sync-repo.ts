@@ -5,9 +5,9 @@
  */
 
 import { Result } from 'better-result'
-import { createHash } from 'node:crypto'
+import { createHash, randomUUID } from 'node:crypto'
 import { existsSync } from 'node:fs'
-import { mkdir, rename, rm } from 'node:fs/promises'
+import { mkdir, rename, rm, stat } from 'node:fs/promises'
 import { dirname } from 'node:path'
 
 import { FileSystemError } from '../archive/archive.errors'
@@ -57,8 +57,8 @@ function chooseHead(remoteHead: string | null, branches: readonly string[]): str
   )
 }
 
-function withoutPassword(url: string): string {
-  return url.replace(/^([a-z][a-z0-9+.-]*:\/\/)[^/@]*:[^/@]*@/i, '$1')
+function withoutCredentials(url: string): string {
+  return url.replace(/^(https?:\/\/)[^/@]*@/i, '$1')
 }
 
 /**
@@ -72,15 +72,16 @@ function withoutPassword(url: string): string {
  *
  * The bundle is rebuilt only when a digest of the refs differs from the one
  * in the existing metadata, or when the bundle on disk no longer holds those
- * refs. It is written beside its destination, checked
- * with `git bundle verify`, and renamed into place, so an interrupted sync
- * leaves the previous bundle intact. The metadata is rewritten on every sync,
+ * refs or has changed size. It is written to a file of its own beside its
+ * destination, checked with `git bundle verify`, and renamed into place, so an
+ * interrupted sync leaves the previous bundle intact. `verify` reads only the
+ * header and checks prerequisites; it does not prove the pack data is intact. The metadata is rewritten on every sync,
  * so fork and archived flags stay current even when the code has not changed.
  *
  * For `https://github.com/` URLs, git can fall back to `gh` for credentials,
  * replacing the user's own helpers for github.com, so private repositories
- * work once `gh` is logged in. Git never prompts. A password in the URL is
- * used to fetch but left out of the metadata.
+ * work once `gh` is logged in. Git never prompts. Credentials in an HTTP(S)
+ * URL are used to fetch but left out of the metadata.
  *
  * @returns What the sync did, or the first failure. A repository without
  * commits is not an error: it is synced as `empty`, with no bundle written
@@ -130,23 +131,30 @@ export function syncRepo(target: SyncTarget, options: SyncOptions): Promise<Resu
     const refsDigest = createHash('sha256').update(refs).update(`HEAD ${symref}\n`).digest('hex')
 
     const previous = (await readMetadata(paths.metadata)).unwrapOr(undefined)
-    const hasBundle = existsSync(paths.bundle)
+    const existingSize = existsSync(paths.bundle) ? (await stat(paths.bundle)).size : undefined
     const status: SyncStatus =
       refs.length === 0
         ? 'empty'
-        : !hasBundle
+        : existingSize === undefined
           ? 'created'
-          : previous?.refsDigest === refsDigest && (await bundleHolds(paths.bundle, refs, git))
+          : previous?.refsDigest === refsDigest &&
+              previous.bundleSize === existingSize &&
+              (await bundleHolds(paths.bundle, refs, git))
             ? 'unchanged'
             : 'updated'
 
-    if (status === 'created' || status === 'updated') yield* Result.await(writeBundle(paths, git))
+    const bundleSize =
+      status === 'empty'
+        ? null
+        : status === 'unchanged'
+          ? (existingSize ?? null)
+          : yield* Result.await(writeBundle(paths, git))
 
     const metadata: RepoMetadata = {
       version: 1,
       owner: target.owner,
       name: target.name,
-      url: withoutPassword(url),
+      url: withoutCredentials(url),
       isFork: target.isFork ?? false,
       isArchived: target.isArchived ?? false,
       isPrivate: target.isPrivate ?? null,
@@ -155,6 +163,7 @@ export function syncRepo(target: SyncTarget, options: SyncOptions): Promise<Resu
       defaultBranch: head === null ? null : symref.replace(/^refs\/heads\//, ''),
       head,
       refsDigest,
+      bundleSize,
       pushedAt: target.pushedAt ?? null,
       syncedAt: (options.now?.() ?? new Date()).toISOString(),
     }
@@ -181,21 +190,17 @@ async function bundleHolds(
 async function writeBundle(
   paths: ArchivePaths,
   git: (args: string[]) => Promise<Result<GitOutput, GitError>>,
-): Promise<Result<void, SyncError>> {
-  const temporary = `${paths.bundle}.tmp`
+): Promise<Result<number, SyncError>> {
+  // Unique per run, so neither a file left by a killed sync nor a sync running
+  // alongside can block or clobber this one.
+  const temporary = `${paths.bundle}.${randomUUID()}.tmp`
   const written = await Result.gen(async function* () {
     yield* Result.await(fileSystem(paths.bundle, () => mkdir(dirname(paths.bundle), { recursive: true })))
-    // A sync killed mid-write leaves these behind, and git refuses to write past its lock.
-    yield* Result.await(
-      fileSystem(temporary, async () => {
-        await rm(temporary, { force: true })
-        await rm(`${temporary}.lock`, { force: true })
-      }),
-    )
     yield* Result.await(git(['bundle', 'create', '--quiet', temporary, '--all']))
     yield* Result.await(git(['bundle', 'verify', '--quiet', temporary]))
+    const { size } = yield* Result.await(fileSystem(temporary, () => stat(temporary)))
     yield* Result.await(fileSystem(paths.bundle, () => rename(temporary, paths.bundle)))
-    return Result.ok(undefined)
+    return Result.ok(size)
   })
   if (written.isErr()) await rm(temporary, { force: true }).catch(() => undefined)
   return written
