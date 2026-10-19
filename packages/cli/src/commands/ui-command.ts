@@ -63,10 +63,13 @@ async function run(args: string[], io: Io): Promise<number> {
     return EXIT.error
   }
   const app = opened.value
-  await new Promise<void>(resolve => {
-    app.onExit(resolve)
-    io.signal?.addEventListener('abort', () => app.exit(), { once: true })
-  })
+  if (io.signal?.aborted) app.exit()
+  if (!app.exited) {
+    await new Promise<void>(resolve => {
+      app.onExit(resolve)
+      io.signal?.addEventListener('abort', () => app.exit(), { once: true })
+    })
+  }
   return EXIT.ok
 }
 

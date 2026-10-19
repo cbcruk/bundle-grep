@@ -13,19 +13,32 @@ import {
   repoHolds,
   search,
   validateRegexes,
-  type ArchiveLayout,
   type SearchEvent,
 } from '@bundle-grep/core'
 import { Result } from 'better-result'
 
+import type { SearchRouteOptions } from '../desktop.types'
 import { toWireError } from '../wire-error'
 import { errorResponse } from './respond'
 
-function wholeNumber(params: URLSearchParams, name: string, fallback: number): Result<number, Response> {
+/**
+ * How long the stream may go quiet before a heartbeat line is sent. Bun
+ * closes a connection that sends nothing for 10 seconds, and a regex over a
+ * large archive can take longer than that between results.
+ */
+const DEFAULT_HEARTBEAT_MS = 5000
+
+const HEARTBEAT = `${JSON.stringify({ type: 'heartbeat' })}\n`
+
+const MAX_LIMIT = 1000
+
+const MAX_CONTEXT = 20
+
+function wholeNumber(params: URLSearchParams, name: string, fallback: number, max: number): Result<number, Response> {
   const raw = params.get(name)
   if (raw === null) return Result.ok(fallback)
-  if (!/^\d+$/.test(raw)) {
-    return Result.err(errorResponse(400, { _tag: 'UsageError', message: `${name} must be a whole number, not "${raw}"` }))
+  if (!/^\d+$/.test(raw) || Number(raw) > max) {
+    return Result.err(errorResponse(400, { _tag: 'UsageError', message: `${name} must be a whole number up to ${max}, not "${raw}"` }))
   }
   return Result.ok(Number(raw))
 }
@@ -39,21 +52,25 @@ function lineOf(event: SearchEvent): string {
  * Answers a search request.
  *
  * Query parameters: `q`, the GitHub code search query; `limit`, the most files
- * to send (default 100); and `context`, lines around each match (default 0).
+ * to send (default 100, at most 1000); and `context`, lines around each match
+ * (default 0, at most 20).
  * A query that does not parse or compile, or whose regexes git rejects, is a
  * `400` carrying the error's span.
  *
  * The stream starts with an `archive` line — how many repositories are being
  * searched, which still need `restore`, and entries that could not be read —
- * then the core's `file` and `repo-error` events, and ends with `done`.
+ * then the core's `file` and `repo-error` events, and ends with `done`. A
+ * `heartbeat` line is sent whenever nothing else has been for a while, so the
+ * connection is not closed as idle; readers skip it.
  * Closing the connection stops the search and kills its git processes.
  */
-export async function searchRoute(request: Request, layout: ArchiveLayout): Promise<Response> {
+export async function searchRoute(request: Request, options: SearchRouteOptions): Promise<Response> {
+  const { layout, heartbeatMs = DEFAULT_HEARTBEAT_MS } = options
   const params = new URL(request.url).searchParams
   const query = params.get('q') ?? ''
   if (query.trim() === '') return errorResponse(400, { _tag: 'UsageError', message: 'q is required' })
-  const numbers = wholeNumber(params, 'limit', 100).andThen(limit =>
-    wholeNumber(params, 'context', 0).map(context => ({ limit, context })),
+  const numbers = wholeNumber(params, 'limit', 100, MAX_LIMIT).andThen(limit =>
+    wholeNumber(params, 'context', 0, MAX_CONTEXT).map(context => ({ limit, context })),
   )
   if (numbers.isErr()) return numbers.error
 
@@ -83,6 +100,7 @@ export async function searchRoute(request: Request, layout: ArchiveLayout): Prom
     invalid: invalid.map(error => error.message),
   }
   let started = false
+  let pending: Promise<IteratorResult<SearchEvent, void>> | undefined
 
   const body = new ReadableStream<Uint8Array>({
     async pull(controller): Promise<void> {
@@ -91,7 +109,16 @@ export async function searchRoute(request: Request, layout: ArchiveLayout): Prom
         controller.enqueue(encoder.encode(`${JSON.stringify(archive)}\n`))
         return
       }
-      const next = await events.next()
+      pending ??= events.next()
+      let timer: ReturnType<typeof setTimeout> | undefined
+      const beat = new Promise<'heartbeat'>(resolve => (timer = setTimeout(resolve, heartbeatMs, 'heartbeat')))
+      const next = await Promise.race([pending, beat])
+      clearTimeout(timer)
+      if (next === 'heartbeat') {
+        controller.enqueue(encoder.encode(HEARTBEAT))
+        return
+      }
+      pending = undefined
       if (next.done) controller.close()
       else controller.enqueue(encoder.encode(lineOf(next.value)))
     },

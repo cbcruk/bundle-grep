@@ -11,8 +11,8 @@ import type { WireError } from './desktop.types'
 /**
  * Keeps a tagged error's tag, message, and query span, dropping the rest.
  *
- * Fields such as a `GitError`'s arguments and stderr stay on the server: the
- * message already says what went wrong.
+ * Structured fields such as a `GitError`'s arguments are dropped; its
+ * message, which quotes git's stderr, is kept.
  */
 export function toWireError(error: { readonly _tag: string; readonly message: string; readonly span?: Span }): WireError {
   return { _tag: error._tag, message: error.message, ...(error.span ? { span: error.span } : {}) }

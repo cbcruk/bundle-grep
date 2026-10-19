@@ -36,7 +36,8 @@ export async function blobRoute(request: Request, layout: ArchiveLayout): Promis
   const segments = segmentsOf(new URL(request.url).pathname)
   const [owner, name, ref, ...rest] = segments ?? []
   const parts = rest.join('/').split('/')
-  if (!owner || !name || !ref || !REF.test(ref) || parts.some(part => part === '' || part === '.' || part === '..')) {
+  if (!owner || !name || !ref || !REF.test(ref) || [owner, name, ...parts].some(part => part.includes('\0')) ||
+    parts.some(part => part === '' || part === '.' || part === '..')) {
     return errorResponse(400, {
       _tag: 'UsageError',
       message: 'Expected /api/blob/<owner>/<repo>/<ref>/<path>, with a ref such as HEAD or a commit id',

@@ -4,17 +4,14 @@
  * @module
  */
 
-import { launch, type App, type EvaluateError, type LaunchError, type LoadError, type WindowError } from 'barlo'
+import { launch, type App } from 'barlo'
 import { Result } from 'better-result'
 import { randomBytes } from 'node:crypto'
 
 import page from '../www/index.html' with { type: 'text' }
 import { createApi } from './api/create-api'
 import { createBridge } from './bridge/create-bridge'
-import type { OpenAppOptions } from './desktop.types'
-
-/** Why the window could not be opened. */
-export type OpenAppError = LaunchError | EvaluateError | WindowError | LoadError
+import type { OpenAppError, OpenAppOptions } from './desktop.types'
 
 /**
  * Launches Chrome in app mode, mounts the API and bridge, and loads the UI.
