@@ -5,25 +5,26 @@
  */
 
 import { Result } from 'better-result'
-import { createHash, randomUUID } from 'node:crypto'
+import { randomUUID } from 'node:crypto'
 import { existsSync } from 'node:fs'
 import { mkdir, readdir, rename, rm, stat } from 'node:fs/promises'
 import { basename, dirname, join } from 'node:path'
 
-import { FileSystemError } from '../archive/archive.errors'
 import { archivePaths } from '../archive/archive-paths'
 import type { ArchivePaths, RepoMetadata } from '../archive/archive.types'
+import { fileSystem } from '../archive/file-system'
 import { readMetadata, writeMetadata } from '../archive/metadata'
 import type { GitError } from '../git/git.errors'
 import type { GitOutput } from '../git/git.types'
+import { branchesOf, chooseHead, refsDigest } from '../git/refs'
 import { runGit } from '../git/run-git'
 import type { SyncError, SyncEvent, SyncOptions, SyncOutcome, SyncStatus, SyncTarget } from './sync.types'
 
-// The empty value clears the user's helpers for github.com, as `gh auth
-// setup-git` does, so gh's token is neither shadowed by nor stored into them.
 /** How old a leftover temporary bundle must be before it counts as abandoned. */
 const ABANDONED_AFTER_MS = 60 * 60 * 1000
 
+// The empty value clears the user's helpers for github.com, as `gh auth
+// setup-git` does, so gh's token is neither shadowed by nor stored into them.
 const GITHUB_CREDENTIALS = [
   '-c',
   'credential.https://github.com.helper=',
@@ -31,33 +32,9 @@ const GITHUB_CREDENTIALS = [
   'credential.https://github.com.helper=!gh auth git-credential',
 ]
 
-function describe(cause: unknown): string {
-  return cause instanceof Error ? cause.message : String(cause)
-}
-
-function fileSystem<T>(path: string, run: () => Promise<T>): Promise<Result<T, FileSystemError>> {
-  return Result.tryPromise({
-    try: run,
-    catch: cause => new FileSystemError({ path, message: `Could not update ${path}: ${describe(cause)}` }),
-  })
-}
-
 function parseSymref(output: GitOutput): string | null {
   const match = /^ref: refs\/heads\/(\S+)\tHEAD$/m.exec(output.stdout.toString('utf8'))
   return match?.[1] ?? null
-}
-
-function branchesOf(refs: string): string[] {
-  return refs.split('\n').flatMap(line => {
-    const ref = line.slice(line.indexOf(' ') + 1)
-    return ref.startsWith('refs/heads/') ? [ref.slice('refs/heads/'.length)] : []
-  })
-}
-
-function chooseHead(remoteHead: string | null, branches: readonly string[]): string | undefined {
-  return [remoteHead, 'main', 'master', branches[0]].find(
-    (branch): branch is string => branch !== null && branch !== undefined && branches.includes(branch),
-  )
 }
 
 function withoutCredentials(url: string): string {
@@ -133,7 +110,7 @@ export function syncRepo(target: SyncTarget, options: SyncOptions): Promise<Resu
     const symref = (yield* Result.await(git(['symbolic-ref', '--quiet', 'HEAD'], [1]))).stdout.toString('utf8').trim()
     const resolved = yield* Result.await(git(['rev-parse', '--verify', '--quiet', 'HEAD^{commit}'], [1]))
     const head = resolved.exitCode === 0 ? resolved.stdout.toString('utf8').trim() : null
-    const refsDigest = createHash('sha256').update(refs).update(`HEAD ${symref}\n`).digest('hex')
+    const digest = refsDigest(refs, symref)
 
     const previous = (await readMetadata(paths.metadata)).unwrapOr(undefined)
     const existingSize = existsSync(paths.bundle)
@@ -144,7 +121,7 @@ export function syncRepo(target: SyncTarget, options: SyncOptions): Promise<Resu
         ? 'empty'
         : existingSize === undefined
           ? 'created'
-          : previous?.refsDigest === refsDigest &&
+          : previous?.refsDigest === digest &&
               previous.bundleSize === existingSize &&
               (await bundleHolds(paths.bundle, refs, git))
             ? 'unchanged'
@@ -169,7 +146,7 @@ export function syncRepo(target: SyncTarget, options: SyncOptions): Promise<Resu
       description: target.description ?? null,
       defaultBranch: head === null ? null : symref.replace(/^refs\/heads\//, ''),
       head,
-      refsDigest,
+      refsDigest: digest,
       bundleSize,
       pushedAt: target.pushedAt ?? null,
       syncedAt: (options.now?.() ?? new Date()).toISOString(),

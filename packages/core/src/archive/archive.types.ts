@@ -22,6 +22,16 @@ export interface ArchivePaths {
   gitDir: string
 }
 
+/** A repository found in the archive by {@linkcode listArchive}. */
+export interface ArchiveEntry {
+  /** The account the repository belongs to. */
+  owner: string
+  /** The repository's name, without its owner. */
+  name: string
+  /** Where the repository's files are; the bundle or the metadata may be missing. */
+  paths: ArchivePaths
+}
+
 /**
  * What is recorded about a repository next to its bundle.
  *

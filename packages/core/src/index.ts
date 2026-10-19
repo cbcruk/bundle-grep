@@ -5,9 +5,10 @@
  * @module
  */
 
-export { FileSystemError, InvalidRepoNameError } from './archive/archive.errors'
+export { ArchiveMismatchError, FileSystemError, InvalidRepoNameError } from './archive/archive.errors'
 export { archivePaths } from './archive/archive-paths'
-export type { ArchiveLayout, ArchivePaths, RepoMetadata } from './archive/archive.types'
+export type { ArchiveEntry, ArchiveLayout, ArchivePaths, RepoMetadata } from './archive/archive.types'
+export { listArchive } from './archive/list-archive'
 export { readMetadata, writeMetadata } from './archive/metadata'
 export { GitError } from './git/git.errors'
 export { GhError } from './github/github.errors'
@@ -46,6 +47,8 @@ export type {
   SearchRepoError,
 } from './search/search.types'
 export { QueryParseError } from './query/query.errors'
+export { restoreRepo, restoreRepos } from './restore/restore-repo'
+export type { RestoreError, RestoreEvent, RestoreOptions, RestoreOutcome, RestoreStatus } from './restore/restore.types'
 export { syncRepo, syncRepos } from './sync/sync-repo'
 export type { SyncError, SyncEvent, SyncOptions, SyncOutcome, SyncStatus, SyncTarget } from './sync/sync.types'
 export { targetFromUrl } from './sync/target-from-url'

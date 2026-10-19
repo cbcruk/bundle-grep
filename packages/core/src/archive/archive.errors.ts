@@ -14,6 +14,14 @@ export class InvalidRepoNameError extends TaggedError('InvalidRepoNameError')<{
   readonly message: string
 }> {}
 
+/** A bundle disagrees with its metadata, or is missing although the metadata says there should be one. */
+export class ArchiveMismatchError extends TaggedError('ArchiveMismatchError')<{
+  /** The bundle or metadata file in question. */
+  readonly path: string
+  /** Human-readable summary, suitable for showing the user. */
+  readonly message: string
+}> {}
+
 /** A file or directory in the archive could not be read or written. */
 export class FileSystemError extends TaggedError('FileSystemError')<{
   /** The path the operation was on. */

@@ -1,22 +1,13 @@
-import { afterAll, beforeAll, describe, expect, test } from 'bun:test'
+import { describe, expect, test } from 'bun:test'
 import { existsSync, mkdirSync, readFileSync, statSync, utimesSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 
 import { readMetadata, syncRepo, syncRepos } from '../../src'
 import type { SyncOptions, SyncTarget } from '../../src'
-import { createFixtureRepo, runGit } from '../fixture'
+import { createFixtureRepo, isolateGitConfig, runGit } from '../fixture'
 import type { FixtureRepo } from '../fixture'
 
-const ISOLATED = { GIT_CONFIG_GLOBAL: '/dev/null', GIT_CONFIG_NOSYSTEM: '1' }
-const saved = Object.fromEntries(Object.keys(ISOLATED).map(key => [key, process.env[key]]))
-
-beforeAll(() => Object.assign(process.env, ISOLATED))
-afterAll(() => {
-  for (const [key, value] of Object.entries(saved)) {
-    if (value === undefined) delete process.env[key]
-    else process.env[key] = value
-  }
-})
+isolateGitConfig()
 
 const FIRST = [{ message: 'init', files: { 'src/a.ts': 'export const a = 1\n' } }]
 

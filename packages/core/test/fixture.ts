@@ -8,6 +8,7 @@
  * @module
  */
 
+import { afterAll, beforeAll } from 'bun:test'
 import { execFileSync } from 'node:child_process'
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
@@ -43,6 +44,25 @@ const ENV = {
   GIT_COMMITTER_NAME: 'Fixture',
   GIT_COMMITTER_EMAIL: 'fixture@example.com',
   GIT_COMMITTER_DATE: '2026-01-01T00:00:00Z',
+}
+
+/**
+ * Makes git run by the code under test ignore the user's global and system config for the current test file.
+ *
+ * Code under test inherits `process.env`, unlike {@linkcode runGit}, so a
+ * developer's `url.*.insteadOf` or `init.defaultBranch` could otherwise change
+ * its results.
+ */
+export function isolateGitConfig(): void {
+  const isolated = { GIT_CONFIG_GLOBAL: '/dev/null', GIT_CONFIG_NOSYSTEM: '1' }
+  const saved = Object.fromEntries(Object.keys(isolated).map(key => [key, process.env[key]]))
+  beforeAll(() => Object.assign(process.env, isolated))
+  afterAll(() => {
+    for (const [key, value] of Object.entries(saved)) {
+      if (value === undefined) delete process.env[key]
+      else process.env[key] = value
+    }
+  })
 }
 
 /**
