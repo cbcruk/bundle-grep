@@ -96,10 +96,14 @@ describe('listMatchingFiles', () => {
     expect(await search('path:/(?-i)useState/')).toEqual(['docs/useState.md'])
   })
 
-  test("the user's colour config does not leak into parsed output", async () => {
-    runGit(gitDir, ['config', 'color.ui', 'always'])
-    expect(await search('content:useState NOT path:test')).toEqual(['src/use-counter.ts'])
-    runGit(gitDir, ['config', '--unset', 'color.ui'])
+  test.each(['color.ui', 'color.grep'])("the user's %s=always does not leak into parsed output", async key => {
+    runGit(gitDir, ['config', key, 'always'])
+    try {
+      expect(await search('content:useState NOT path:test')).toEqual(['src/use-counter.ts'])
+      expect(await search('NOT content:zzzz')).toContain('src/empty.ts')
+    } finally {
+      runGit(gitDir, ['config', '--unset', key])
+    }
   })
 
   test('a git failure is a value', async () => {
