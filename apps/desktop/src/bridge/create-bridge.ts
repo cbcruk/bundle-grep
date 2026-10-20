@@ -11,6 +11,7 @@ import {
   readMetadata,
   resolveSyncSource,
   restoreRepos,
+  symbolLanguages,
   syncRepos,
   type ArchiveEntry,
   type SyncTarget,
@@ -132,5 +133,7 @@ export function createBridge(options: BridgeOptions): Bridge {
     bundleGrepSettings: async () => ok({ root: options.root, archiveDir: layout.archiveDir, cacheDir: layout.cacheDir }),
 
     bundleGrepLanguages: async () => ok(languageNames()),
+
+    bundleGrepSymbolLanguages: async () => ok(symbolLanguages()),
   }
 }

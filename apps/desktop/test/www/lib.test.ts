@@ -8,6 +8,16 @@ import { hunks, segments } from '../../www/src/lib/highlight'
 import { isPageKey, isTyping } from '../../www/src/lib/keyboard'
 import { readNdjson } from '../../www/src/lib/ndjson'
 import { parseRoute, routeSearch } from '../../www/src/lib/route'
+import { usesSymbol } from '../../www/src/components/results/results.utils'
+
+describe('usesSymbol', () => {
+  test('finds a symbol: qualifier anywhere in a query that parses', () => {
+    expect(usesSymbol('symbol:foo')).toBe(true)
+    expect(usesSymbol('a OR (b -symbol:/x/)')).toBe(true)
+    expect(usesSymbol('symbol')).toBe(false)
+    expect(usesSymbol('symbol:foo (')).toBe(false)
+  })
+})
 
 describe('segments', () => {
   test('splits a line around its matches', () => {

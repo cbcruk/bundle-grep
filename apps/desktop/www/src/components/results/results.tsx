@@ -8,7 +8,7 @@ import { FileResult } from '../file-result/file-result'
 import { Link } from '../link/link'
 import { QueryError } from '../query-error/query-error'
 import type { ResultsProps } from './results.types'
-import { plural } from './results.utils'
+import { plural, usesSymbol } from './results.utils'
 import './results.css'
 
 /**
@@ -19,7 +19,7 @@ import './results.css'
  * Moving also works while a button such as "Show more" keeps focus after a
  * click; opening does not, so `Enter` still presses the button.
  */
-export function Results({ query, search, limit, maxLimit, onShowMore }: ResultsProps): React.JSX.Element {
+export function Results({ query, search, limit, maxLimit, onShowMore, symbolLanguages }: ResultsProps): React.JSX.Element {
   const [selected, setSelected] = useState(-1)
   const cards = useRef<(HTMLElement | null)[]>([])
   const { status, archive, files, failures, done, error } = search
@@ -106,7 +106,15 @@ export function Results({ query, search, limit, maxLimit, onShowMore }: ResultsP
       ))}
 
       {status === 'done' && files.length === 0 && archive && archive.repos > 0 && (
-        <p className="results-empty">No files matched.</p>
+        <p className="results-empty">
+          No files matched.
+          {usesSymbol(query) && symbolLanguages.length > 0 && (
+            <>
+              {' '}
+              <code>symbol:</code> finds definitions in {symbolLanguages.join(', ')} files only.
+            </>
+          )}
+        </p>
       )}
 
       {groups.map(group => (

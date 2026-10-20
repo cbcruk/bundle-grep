@@ -4,7 +4,16 @@
  * @module
  */
 
-import { compileQuery, loadArchivedRepos, parseQuery, QueryCompileError, repoHolds, search, validateRegexes } from '@bundle-grep/core'
+import {
+  compileQuery,
+  loadArchivedRepos,
+  parseQuery,
+  QueryCompileError,
+  repoHolds,
+  search,
+  symbolLanguages,
+  validateRegexes,
+} from '@bundle-grep/core'
 
 import { parseCommandArgs, wholeNumber } from '../args'
 import type { Command, Io } from '../cli.types'
@@ -109,7 +118,11 @@ async function run(args: string[], io: Io): Promise<number> {
       io.write(formatFile(event, styles, context > 0))
     } else {
       matched = event.totalFiles > 0
-      if (!values.json) io.error(`${errors.dim(formatSummary(event, shown))}\n`)
+      if (values.json) continue
+      io.error(`${errors.dim(formatSummary(event, shown))}\n`)
+      if (!matched && plan.symbols.length > 0) {
+        io.error(`${errors.dim(`symbol: finds definitions in ${symbolLanguages().join(', ')} files only`)}\n`)
+      }
     }
   }
   if (failures > 0 || io.signal?.aborted) return EXIT.error

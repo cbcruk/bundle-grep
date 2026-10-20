@@ -33,6 +33,11 @@ describe('bridge', () => {
     expect(languages.ok && languages.value).toContain('TypeScript')
   })
 
+  test('symbol languages lists what symbol: covers', async () => {
+    const languages = await createBridge({ layout, root: fixture.root }).bundleGrepSymbolLanguages()
+    expect(languages.ok && languages.value).toContain('Go')
+  })
+
   test('sync rejects anything but a non-empty array of sources', async () => {
     const bridge = createBridge({ layout, root: fixture.root })
     for (const sources of [undefined, 'x', [], [''], [1], ['ok', null]]) {

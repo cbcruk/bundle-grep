@@ -7,7 +7,7 @@
 import type { CompletionSources, Suggestion, Word } from './complete.types'
 import { quoteValue } from './query-edit'
 
-const KEYS = ['repo:', 'language:', 'path:', 'org:', 'user:', 'content:', 'is:']
+const KEYS = ['repo:', 'language:', 'path:', 'symbol:', 'org:', 'user:', 'content:', 'is:']
 
 const IS_VALUES = ['fork', 'archived']
 

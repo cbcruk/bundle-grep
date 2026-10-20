@@ -32,15 +32,26 @@ export function useArchive(): ArchiveState {
   return { repos, reload }
 }
 
+function useNames(load: () => Promise<BridgeResult<string[]>>): string[] {
+  const [names, setNames] = useState<string[]>([])
+  useEffect(() => {
+    void load().then(result => {
+      if (result.ok) setNames(result.value)
+    })
+  }, [load])
+  return names
+}
+
+const loadLanguages = (): Promise<BridgeResult<string[]>> => bridge().bundleGrepLanguages()
+
+const loadSymbolLanguages = (): Promise<BridgeResult<string[]>> => bridge().bundleGrepSymbolLanguages()
+
 /** The names `language:` accepts, or `[]` until they load. */
 export function useLanguages(): string[] {
-  const [languages, setLanguages] = useState<string[]>([])
-  useEffect(() => {
-    void bridge()
-      .bundleGrepLanguages()
-      .then(result => {
-        if (result.ok) setLanguages(result.value)
-      })
-  }, [])
-  return languages
+  return useNames(loadLanguages)
+}
+
+/** The languages `symbol:` finds definitions in, or `[]` until they load. */
+export function useSymbolLanguages(): string[] {
+  return useNames(loadSymbolLanguages)
 }
