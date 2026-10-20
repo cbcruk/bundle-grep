@@ -16,8 +16,11 @@ import { searchRoute } from './search-route'
  * Builds the handler for every `/api/` path.
  *
  * Paths outside `/api/` are declined, so the UI's files are served by the
- * routes behind it. Every `/api/` request passes the {@linkcode guard} first,
+ * routes behind it. Every `/api/` request passes the guard first — the
+ * server's own `Host`, the token, and for a `POST` the server's own `Origin` —
  * and an unknown one is a `404` rather than falling through to the UI.
+ * `POST /api/session`, which hands out the token, is served by
+ * {@linkcode serveApp} itself, ahead of this handler.
  *
  * | Route | Answers with |
  * | --- | --- |
