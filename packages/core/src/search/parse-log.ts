@@ -4,7 +4,7 @@
  * @module
  */
 
-import type { LoggedCommit, PatchedCommit, PatchedFile } from './history.types'
+import type { LoggedCommit, NameLogParser, PatchedCommit, PatchedFile } from './history.types'
 
 /** Starts each commit in both formats; git writes it for `%x1e`. */
 const MARK = '\x1e'
@@ -22,18 +22,47 @@ const NAME_RECORD = new RegExp(`^\n?${MARK}(${ID})$`)
 const PATCH_RECORD = new RegExp(`(?:^|\n)${MARK}(?=${ID}\0)`)
 
 /**
- * Parses `git log --format=%x1e%H --name-only -z` output into commits and their files.
+ * Reads `git log --format=%x1e%H --name-only -z` output as it streams,
+ * handing over each commit once its last file has arrived.
  *
  * The output is read field by field, so a path holding the marker byte is
- * still read as a path.
+ * still read as a path. Call `end` after the last chunk to hand over the
+ * final commit.
  */
+export function createNameLogParser(onCommit: (commit: LoggedCommit) => void): NameLogParser {
+  let pending = ''
+  let current: LoggedCommit | undefined
+  const field = (text: string): void => {
+    const sha = NAME_RECORD.exec(text)?.[1]
+    const path = text.replace(/^\n/, '')
+    if (sha) {
+      if (current) onCommit(current)
+      current = { sha, files: [] }
+    } else if (path !== '') {
+      current?.files.push(path)
+    }
+  }
+  return {
+    push: text => {
+      const fields = (pending + text).split('\0')
+      pending = fields.pop()!
+      for (const text of fields) field(text)
+    },
+    end: () => {
+      if (pending !== '') field(pending)
+      pending = ''
+      if (current) onCommit(current)
+      current = undefined
+    },
+  }
+}
+
+/** Parses the whole of `git log --format=%x1e%H --name-only -z` output into commits and their files. */
 export function parseNameLog(output: string): LoggedCommit[] {
   const commits: LoggedCommit[] = []
-  for (const field of output.split('\0')) {
-    const sha = NAME_RECORD.exec(field)?.[1]
-    if (sha) commits.push({ sha, files: [] })
-    else if (field.replace(/^\n/, '') !== '') commits.at(-1)?.files.push(field.replace(/^\n/, ''))
-  }
+  const parser = createNameLogParser(commit => commits.push(commit))
+  parser.push(output)
+  parser.end()
   return commits
 }
 

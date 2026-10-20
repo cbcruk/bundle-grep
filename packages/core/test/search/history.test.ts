@@ -112,10 +112,23 @@ describe('history:', () => {
     expect(commits(await collect('history:/(?-i)old[A-Z]ame/ path:src'))).toHaveLength(2)
   })
 
-  test('the limit counts commits', async () => {
+  test('the limit counts commits, and histories stop once more than the limit were found', async () => {
     const events = await collect('history:oldName', { limit: 2 })
     expect(commits(events)).toHaveLength(2)
-    expect(done(events)).toMatchObject({ totalCommits: 4, truncated: true })
+    const capped = done(events)
+    expect(capped).toMatchObject({ truncated: true, capped: true })
+    expect(capped.totalCommits).toBeGreaterThanOrEqual(2)
+    expect(capped.totalCommits).toBeLessThan(4)
+    const exact = done(await collect('history:oldName', { limit: 4 }))
+    expect(exact).toMatchObject({ totalCommits: 4, truncated: false })
+    expect(exact).not.toHaveProperty('capped')
+  })
+
+  test('a single repository with more commits than the limit stops early', async () => {
+    const one = repos.filter(repo => repo.name === 'me/hist')
+    const events = await collect('history:oldName', { limit: 1, repos: one, concurrency: 1 })
+    expect(commits(events)).toEqual(['me/hist move docs: docs/b.md +1'])
+    expect(done(events)).toMatchObject({ totalCommits: 1, truncated: true, capped: true })
   })
 
   test('starts from ref: when given, skipping repositories without it', async () => {

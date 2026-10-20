@@ -12,9 +12,9 @@ import { languageOf } from '../plan/languages'
 import { narrowingPathspecs } from '../plan/list-matching-files'
 import { matchesPath } from '../plan/match-path'
 import type { HistoryPattern } from '../plan/plan.types'
-import type { DescribeCommitsOptions, DescribedCommit, LoggedCommit, MatchingCommitsOptions } from './history.types'
+import type { DescribeCommitsOptions, DescribedCommit, LoggedCommit, MatchingCommits, MatchingCommitsOptions } from './history.types'
 import { createHighlighter } from './match-ranges'
-import { parseNameLog, parsePatchLog } from './parse-log'
+import { createNameLogParser, parsePatchLog } from './parse-log'
 import type { ChangedLine } from './search.types'
 
 /**
@@ -39,27 +39,46 @@ function logArgs(history: HistoryPattern): string[] {
 
 /**
  * Lists the commits reachable from `ref` whose changes match the pattern,
- * newest first, with the changed files `expr` keeps.
+ * newest first, with the changed files `expr` keeps, stopping at `max`.
  *
  * `git log -G` keeps a commit when a line it added or removed matches, and
  * lists only the files with such lines; commits left with no file `expr`
  * keeps are dropped. Merges are left out, as `git log` shows them without a
- * diff. The whole history is walked whatever the search's limit, so the
- * totals it reports are exact; a common pattern in a large repository costs
- * a full `git log -G`.
+ * diff. Git diffs every commit it walks past, so it is stopped as soon as
+ * `max` commits were kept, or `enough` is aborted, rather than left to walk
+ * the whole history.
  *
- * @returns The commits, or the {@linkcode GitError} of running git.
+ * @returns The commits and whether that was all of them, or the
+ * {@linkcode GitError} of running git.
  */
-export async function matchingCommits(options: MatchingCommitsOptions): Promise<Result<LoggedCommit[], GitError>> {
-  const { gitDir, ref, history, expr, signal } = options
+export async function matchingCommits(options: MatchingCommitsOptions): Promise<Result<MatchingCommits, GitError>> {
+  const { gitDir, ref, history, expr, max, signal, onCommit } = options
+  const commits: LoggedCommit[] = []
+  const full = new AbortController()
+  const enough = options.enough ? AbortSignal.any([full.signal, options.enough]) : full.signal
+  const parser = createNameLogParser(commit => {
+    const files = commit.files.filter(path => matchesPath(expr, path))
+    if (files.length && commits.length < max && !enough.aborted) {
+      const kept = { sha: commit.sha, files }
+      commits.push(kept)
+      onCommit?.(kept)
+    }
+    if (commits.length >= max) full.abort()
+  })
+  const decoder = new TextDecoder()
   const args = [...logArgs(history), '--format=%x1e%H', '--name-only', '-z', ref, '--', ...narrowingPathspecs(expr)]
-  const result = await runGit(args, { cwd: gitDir, signal })
-  return result.map(({ stdout }) =>
-    parseNameLog(stdout.toString('utf8')).flatMap(commit => {
-      const files = commit.files.filter(path => matchesPath(expr, path))
-      return files.length ? [{ sha: commit.sha, files }] : []
-    }),
-  )
+  const result = await runGit(args, {
+    cwd: gitDir,
+    signal: AbortSignal.any([signal, enough]),
+    onStdout: chunk => {
+      if (!enough.aborted) parser.push(decoder.decode(chunk, { stream: true }))
+    },
+  })
+  if (enough.aborted && !signal.aborted) return Result.ok({ commits, complete: false })
+  if (result.isErr()) return result
+  parser.push(decoder.decode())
+  parser.end()
+  return Result.ok({ commits, complete: commits.length < max })
 }
 
 /**

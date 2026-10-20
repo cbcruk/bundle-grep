@@ -59,14 +59,16 @@ name the commit they were found in.
 
 `history:` searches what commits changed rather than the files as they are
 now, so it finds deleted code too: `history:useState path:src` lists, newest
-first, every commit that added or removed a line matching `useState`, with
+first, the commits that added or removed a line matching `useState`, with
 those lines. It runs `git log -G` from `HEAD`, or from the `ref:` given, and
-leaves out merge commits. It can be combined with `path:`, `language:`,
-`repo:`, `org:`, `user:`, `is:` and `ref:` only. A `history:` regular
-expression is a POSIX extended regular expression, so `\d` is not supported —
-write `[0-9]` — and a leading `(?-i)` makes it case-sensitive. `ref:` and
-`history:` may each appear once, and neither can be negated or used inside
-`OR`.
+leaves out merge commits. Since git diffs every commit it walks past,
+histories stop once more commits than `--limit` were found, and the total then
+reads as a lower bound such as `100+ commits`. It can be combined with
+`path:`, `language:`, `repo:`, `org:`, `user:`, `is:` and `ref:` only. A
+`history:` regular expression is a POSIX extended regular expression, so `\d`
+is not supported — write `[0-9]` — and a leading `(?-i)` makes it
+case-sensitive. `ref:` and `history:` may each appear once, and neither can be
+negated or used inside `OR`.
 
 ## Development
 
@@ -91,6 +93,10 @@ bun build --compile packages/cli/src/main.ts --outfile bundle-grep
 pnpm dev:ui                                            # Vite on 127.0.0.1:5173
 bun packages/cli/src/main.ts ui --dev-server http://127.0.0.1:5173
 ```
+
+`pnpm bench --dir <directory of bare repositories>` times searches at 10, 100
+and 500 repositories; [docs/performance.md](docs/performance.md) has the
+numbers and where the time goes.
 
 In the window, `/` focuses the search box, `j`/`k` move between results,
 `Enter` opens one, and `Esc` goes back.

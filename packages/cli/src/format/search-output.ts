@@ -78,13 +78,17 @@ export function formatRepoHeading(repo: string, first: boolean, styles: Styles):
 /**
  * Summarises a finished search, such as `12 files in 3 repositories`, without a line break.
  *
- * A `history:` search counts commits instead, as `4 commits in 2 repositories`.
+ * A `history:` search counts commits instead, as `4 commits in 2 repositories`,
+ * or `100+ commits` when a repository's history was not walked to the end.
  * Says when the results were cut at the limit, and when the search stopped
  * early.
  */
 export function formatSummary(done: DoneEvent, shown: number): string {
   const repos = Object.keys(done.facets.repos).length
-  const found = done.totalCommits === undefined ? plural(done.totalFiles, 'file') : plural(done.totalCommits, 'commit')
+  const found =
+    done.totalCommits === undefined
+      ? plural(done.totalFiles, 'file')
+      : `${done.totalCommits}${done.capped ? '+' : ''} ${done.totalCommits === 1 && !done.capped ? 'commit' : 'commits'}`
   const parts = [`${found} in ${plural(repos, 'repository', 'repositories')}`]
   if (done.truncated) parts.push(`showing ${shown}; raise --limit for more`)
   if (done.stopped === 'aborted') parts.push('stopped early')

@@ -15,6 +15,22 @@ export interface LoggedCommit {
   files: string[]
 }
 
+/** Reads the first pass's output in chunks, from {@linkcode createNameLogParser}. */
+export interface NameLogParser {
+  /** Reads the next chunk of output. */
+  push: (text: string) => void
+  /** Hands over the last commit once the output has ended. */
+  end: () => void
+}
+
+/** The commits of the first pass, from {@linkcode matchingCommits}. */
+export interface MatchingCommits {
+  /** The commits found, newest first, at most {@linkcode MatchingCommitsOptions.max}. */
+  commits: LoggedCommit[]
+  /** `false` when `max` commits were found, so more may match. */
+  complete: boolean
+}
+
 /** One commit of the second pass, with its metadata and patch. */
 export interface PatchedCommit {
   /** The fields of `%H%x00%P%x00%aI%x00%an%x00%s%x00`, in order. */
@@ -41,6 +57,12 @@ export interface MatchingCommitsOptions {
   history: HistoryPattern
   /** Which changed files count, from `path:` and `language:`. */
   expr: FileExpr
+  /** Stops walking history once this many commits with files that count were found. */
+  max: number
+  /** Stops walking history when aborted, keeping what was found, as when the whole search has enough. */
+  enough?: AbortSignal
+  /** Called with each commit kept, as it is found. */
+  onCommit?: (commit: LoggedCommit) => void
   /** Kills git when aborted. */
   signal: AbortSignal
 }
