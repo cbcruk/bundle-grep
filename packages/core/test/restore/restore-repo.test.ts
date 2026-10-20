@@ -52,6 +52,19 @@ describe('restoreRepo', () => {
     expect((await restoreRepo(REPO, layout)).unwrap().status).toBe('unchanged')
   })
 
+  test('fails rather than rebuild a cache another run is updating', async () => {
+    using fixture = createFixtureRepo(FIRST)
+    const layout = layoutOf(fixture)
+    const { paths } = (await syncRepo(targetOf(fixture), layout)).unwrap()
+    rmSync(paths.gitDir, { recursive: true })
+    const [restored, synced] = await Promise.all([restoreRepo(REPO, layout), syncRepo(targetOf(fixture), layout)])
+
+    expect([restored, synced].filter(result => result.isErr()).map(result => result.isErr() && result.error._tag)).toEqual([
+      'RepoLockedError',
+    ])
+    expect(existsSync(`${paths.gitDir}.lock`)).toBe(false)
+  })
+
   test('sync builds the symbol index, and restore rebuilds it even for a cache that already matched', async () => {
     using fixture = createFixtureRepo(FIRST)
     const layout = layoutOf(fixture)

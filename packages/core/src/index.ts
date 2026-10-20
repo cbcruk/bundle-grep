@@ -5,7 +5,7 @@
  * @module
  */
 
-export { ArchiveMismatchError, FileSystemError, InvalidRepoNameError } from './archive/archive.errors'
+export { ArchiveMismatchError, FileSystemError, InvalidRepoNameError, RepoLockedError } from './archive/archive.errors'
 export { archivePaths } from './archive/archive-paths'
 export type { ArchiveEntry, ArchiveLayout, ArchivePaths, RepoMetadata } from './archive/archive.types'
 export { listArchive } from './archive/list-archive'
@@ -66,7 +66,6 @@ export { restoreRepo, restoreRepos } from './restore/restore-repo'
 export type { RestoreError, RestoreEvent, RestoreOptions, RestoreOutcome, RestoreStatus } from './restore/restore.types'
 export { expandHome } from './sync/expand-home'
 export { resolveSyncSource } from './sync/resolve-sync-source'
-export { SyncLockedError } from './sync/sync.errors'
 export { DEFAULT_SYNC_CONCURRENCY, syncRepo, syncRepos } from './sync/sync-repo'
 export type {
   ResolvedSource,

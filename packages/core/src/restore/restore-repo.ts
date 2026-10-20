@@ -14,6 +14,7 @@ import { archivePaths } from '../archive/archive-paths'
 import type { ArchiveEntry } from '../archive/archive.types'
 import { fileSystem } from '../archive/file-system'
 import { readMetadata } from '../archive/metadata'
+import { acquireRepoLock } from '../archive/repo-lock'
 import type { GitError } from '../git/git.errors'
 import type { GitOutput } from '../git/git.types'
 import { branchesOf, chooseHead, refsDigest } from '../git/refs'
@@ -74,6 +75,10 @@ function lines(output: GitOutput): string[] {
  * that commit this may not be the branch sync used; the files searched are
  * the same.
  *
+ * Once the checks pass, it takes the same lock as {@linkcode syncRepo}, so
+ * it fails with {@linkcode RepoLockedError} rather than rebuilding a cache a
+ * sync is fetching into.
+ *
  * @returns What restoring did, or the first failure. A corrupted bundle fails
  * with the {@linkcode GitError} of the fetch that reads it.
  *
@@ -95,11 +100,13 @@ export async function restoreRepo(
     const mismatch = (path: string, message: string): Result<never, ArchiveMismatchError> =>
       Result.err(new ArchiveMismatchError({ path, message }))
     const empty = async (): Promise<Result<RestoreOutcome, RestoreError>> => {
-      const isRepository = existsSync(join(paths.gitDir, 'HEAD'))
-      const removed = await fileSystem(paths.gitDir, () =>
-        isRepository ? rm(paths.gitDir, { recursive: true, force: true }) : Promise.resolve(),
-      )
-      return removed.map(() => ({ status: 'empty', paths, defaultBranch: null, head: null }))
+      const outcome: RestoreOutcome = { status: 'empty', paths, defaultBranch: null, head: null }
+      if (!existsSync(join(paths.gitDir, 'HEAD'))) return Result.ok(outcome)
+      const lock = await acquireRepoLock(`${paths.gitDir}.lock`)
+      if (lock.isErr()) return lock
+      await using _lock = lock.value
+      const removed = await fileSystem(paths.gitDir, () => rm(paths.gitDir, { recursive: true, force: true }))
+      return removed.map(() => outcome)
     }
 
     if (metadata?.head === null) return done(yield* Result.await(empty()))
@@ -135,6 +142,7 @@ export async function restoreRepo(
       return resolved.map(output => (output.exitCode === 0 ? output.stdout.toString('utf8').trim() : undefined))
     }
 
+    await using _lock = yield* Result.await(acquireRepoLock(`${paths.gitDir}.lock`))
     const cached = existsSync(join(paths.gitDir, 'HEAD'))
     if (cached) {
       const refs = yield* Result.await(git(['for-each-ref', '--format=%(objectname) %(refname)', 'refs/heads', 'refs/tags']))

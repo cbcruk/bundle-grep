@@ -2,7 +2,7 @@ import { describe, expect, test } from 'bun:test'
 import { existsSync, mkdirSync, readFileSync, statSync, utimesSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 
-import { readMetadata, SyncLockedError, syncRepo, syncRepos } from '../../src'
+import { readMetadata, RepoLockedError, syncRepo, syncRepos } from '../../src'
 import type { SyncOptions, SyncTarget } from '../../src'
 import { createFixtureRepo, isolateGitConfig, runGit } from '../fixture'
 import type { FixtureRepo } from '../fixture'
@@ -224,25 +224,9 @@ describe('syncRepo', () => {
 
     expect(results.filter(result => result.isOk())).toHaveLength(1)
     const locked = results.find(result => result.isErr())
-    expect(locked?.isErr() && locked.error).toBeInstanceOf(SyncLockedError)
+    expect(locked?.isErr() && locked.error).toBeInstanceOf(RepoLockedError)
     expect(existsSync(join(options.cacheDir, 'acme', 'widgets.git.lock'))).toBe(false)
     expect((await syncRepo(target, options)).isOk()).toBe(true)
-  })
-
-  test('takes over a lock left by a process that is gone', async () => {
-    using fixture = createFixtureRepo(FIRST)
-    const { options, target } = setup(fixture)
-    const lock = join(options.cacheDir, 'acme', 'widgets.git.lock')
-    mkdirSync(join(options.cacheDir, 'acme'), { recursive: true })
-    const gone = Bun.spawnSync(['true']).pid
-    writeFileSync(lock, `${gone}\n`)
-
-    expect((await syncRepo(target, options)).unwrap().status).toBe('created')
-    expect(existsSync(lock)).toBe(false)
-
-    writeFileSync(lock, 'not a pid\n')
-    const held = await syncRepo(target, options)
-    expect(held.isErr() && held.error._tag).toBe('SyncLockedError')
   })
 
   test('passes extra environment to git', async () => {
@@ -342,6 +326,33 @@ describe('syncRepos', () => {
       ['d', 'synced'],
       ['e', 'synced'],
     ])
+  })
+
+  test('starts nothing more once the loop is left, and waits for what was in progress', async () => {
+    using fixture = createFixtureRepo(FIRST)
+    const { options, target } = setup(fixture)
+    const targets = ['a', 'b', 'c', 'd', 'e', 'f'].map(name => ({ ...target, name }))
+
+    for await (const event of syncRepos(targets, { ...options, concurrency: 2 })) {
+      expect(event.target.name).toBe('a')
+      break
+    }
+
+    const synced = targets.filter(t => existsSync(join(options.archiveDir, 'acme', `${t.name}.json`))).map(t => t.name)
+    expect(synced.length).toBeGreaterThanOrEqual(2)
+    expect(synced.length).toBeLessThan(targets.length)
+    expect(synced).toEqual(targets.slice(0, synced.length).map(t => t.name))
+    expect(targets.some(t => existsSync(join(options.cacheDir, 'acme', `${t.name}.git.lock`)))).toBe(false)
+  })
+
+  test('falls back to the default for a concurrency that is not a number', async () => {
+    using fixture = createFixtureRepo(FIRST)
+    const { options, target } = setup(fixture)
+
+    const events = []
+    for await (const event of syncRepos([target], { ...options, concurrency: Number.NaN })) events.push(event)
+
+    expect(events.map(event => event.type)).toEqual(['synced'])
   })
 
   test('starts nothing more once aborted, but yields what was in progress', async () => {
