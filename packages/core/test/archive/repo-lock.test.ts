@@ -1,6 +1,6 @@
 import { describe, expect, test } from 'bun:test'
 import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
-import { hostname, tmpdir, uptime } from 'node:os'
+import { tmpdir, uptime } from 'node:os'
 import { join } from 'node:path'
 
 import { acquireRepoLock } from '../../src/archive/repo-lock'
@@ -17,7 +17,7 @@ describe('acquireRepoLock', () => {
     using lock = lockPath()
     {
       await using _held = (await acquireRepoLock(lock.path)).unwrap()
-      expect(readFileSync(lock.path, 'utf8')).toStartWith(`${process.pid} ${hostname()} `)
+      expect(readFileSync(lock.path, 'utf8')).toStartWith(`${process.pid} `)
       const second = await acquireRepoLock(lock.path)
       expect(second.isErr() && second.error).toMatchObject({ _tag: 'RepoLockedError', pid: process.pid })
     }
@@ -30,23 +30,23 @@ describe('acquireRepoLock', () => {
     const gone = Bun.spawnSync(['true']).pid
     ;(await acquireRepoLock(lock.path)).unwrap()
 
-    writeFileSync(lock.path, `${gone} ${hostname()} ${boot()} x\n`)
+    writeFileSync(lock.path, `${gone} ${boot()} x\n`)
     {
       await using _held = (await acquireRepoLock(lock.path)).unwrap()
     }
 
-    writeFileSync(lock.path, `${process.pid} ${hostname()} ${boot() - 24 * 60 * 60 * 1000} x\n`)
+    writeFileSync(lock.path, `${process.pid} ${boot() - 24 * 60 * 60 * 1000} x\n`)
     {
       await using _held = (await acquireRepoLock(lock.path)).unwrap()
     }
     expect(existsSync(lock.path)).toBe(false)
   })
 
-  test('treats a lock from another host, or one it cannot read, as held', async () => {
+  test('treats a live lock, or one it cannot read, as held', async () => {
     using lock = lockPath()
     ;(await acquireRepoLock(lock.path)).unwrap()
 
-    for (const text of [`${Bun.spawnSync(['true']).pid} elsewhere.example ${boot()} x\n`, 'not a lock\n']) {
+    for (const text of [`${process.pid} ${boot()} x\n`, 'not a lock\n']) {
       writeFileSync(lock.path, text)
       const result = await acquireRepoLock(lock.path)
       expect(result.isErr() && result.error._tag).toBe('RepoLockedError')
@@ -60,7 +60,7 @@ describe('acquireRepoLock', () => {
     ;(await acquireRepoLock(lock.path)).unwrap()
 
     for (let trial = 0; trial < 50; trial++) {
-      writeFileSync(lock.path, `${gone} ${hostname()} ${boot()} x\n`)
+      writeFileSync(lock.path, `${gone} ${boot()} x\n`)
       const results = await Promise.all(Array.from({ length: 4 }, () => acquireRepoLock(lock.path)))
       const held = results.filter(result => result.isOk())
       expect(held).toHaveLength(1)

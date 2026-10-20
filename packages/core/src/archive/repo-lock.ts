@@ -7,8 +7,9 @@
 import { Result } from 'better-result'
 import { randomUUID } from 'node:crypto'
 import { mkdir, readFile, rm, stat, writeFile } from 'node:fs/promises'
-import { hostname, uptime } from 'node:os'
+import { uptime } from 'node:os'
 import { dirname } from 'node:path'
+import { setTimeout as sleep } from 'node:timers/promises'
 
 import { FileSystemError, RepoLockedError } from './archive.errors'
 
@@ -17,7 +18,6 @@ const BOOT_TOLERANCE_MS = 5 * 60 * 1000
 
 interface Holder {
   pid: number
-  host: string
   boot: number
 }
 
@@ -26,9 +26,9 @@ function bootTime(): number {
 }
 
 function parseHolder(text: string): Holder | null {
-  const [pid, host, boot] = text.trim().split(' ')
-  const parsed = { pid: Number(pid), host: host ?? '', boot: Number(boot) }
-  return Number.isSafeInteger(parsed.pid) && parsed.pid > 0 && parsed.host !== '' && Number.isFinite(parsed.boot) ? parsed : null
+  const [pid, boot] = text.trim().split(' ')
+  const parsed = { pid: Number(pid), boot: Number(boot) }
+  return Number.isSafeInteger(parsed.pid) && parsed.pid > 0 && Number.isFinite(parsed.boot) ? parsed : null
 }
 
 function isAlive(pid: number): boolean {
@@ -40,9 +40,13 @@ function isAlive(pid: number): boolean {
   }
 }
 
-/** A lock is stale only when it was taken on this host and its process is gone, or the host has rebooted since. */
+/**
+ * A lock is stale when its process is gone, or the machine has rebooted since it was taken.
+ *
+ * The cache is local, so the process is looked up on this machine.
+ */
 function isStale(holder: Holder | null): boolean {
-  if (holder === null || holder.host !== hostname()) return false
+  if (holder === null) return false
   return Math.abs(holder.boot - bootTime()) > BOOT_TOLERANCE_MS || !isAlive(holder.pid)
 }
 
@@ -78,12 +82,11 @@ async function takeOver(path: string, stale: string): Promise<void> {
 }
 
 /**
- * Takes the lock file at a path, recording this process, host and boot in it.
+ * Takes the lock file at a path, recording this process and boot in it.
  *
- * A lock left on this host by a process that is gone, or from before the host
- * last booted, is taken over, so a killed or interrupted run does not block
- * the next one. A lock from another host, or one that cannot be read, is
- * treated as held. Releasing removes the file only while it is still this
+ * A lock left by a process that is gone, or from before the machine last
+ * booted, is taken over, so a killed or interrupted run does not block the
+ * next one. A lock that cannot be read is treated as held. Releasing removes the file only while it is still this
  * lock.
  *
  * @returns A handle whose disposal releases the lock, or
@@ -92,7 +95,7 @@ async function takeOver(path: string, stale: string): Promise<void> {
 export async function acquireRepoLock(path: string): Promise<Result<AsyncDisposable, RepoLockedError | FileSystemError>> {
   const failed = (error: unknown): FileSystemError =>
     new FileSystemError({ path, message: `Cannot lock ${path}: ${error instanceof Error ? error.message : String(error)}` })
-  const token = `${process.pid} ${hostname()} ${Math.round(bootTime())} ${randomUUID()}\n`
+  const token = `${process.pid} ${Math.round(bootTime())} ${randomUUID()}\n`
   const release = async (): Promise<void> => {
     if ((await read(path)) === token) await rm(path, { force: true }).catch(() => undefined)
   }
@@ -103,7 +106,7 @@ export async function acquireRepoLock(path: string): Promise<Result<AsyncDisposa
     return Result.err(failed(error))
   }
   for (let attempt = 0; attempt < 5; attempt++) {
-    if (attempt > 0) await Bun.sleep(10 * attempt)
+    if (attempt > 0) await sleep(10 * attempt)
     try {
       await writeFile(path, token, { flag: 'wx' })
       return Result.ok({ [Symbol.asyncDispose]: release })
