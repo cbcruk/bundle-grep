@@ -1,55 +1,90 @@
 /**
- * Types shared by the desktop app's server, bridge, and entry point.
+ * Types shared by the desktop app's server and its page.
  *
  * @module
  */
 
 import type { ArchiveLayout, RepoMetadata, RestoreStatus, SearchEvent, Span, SyncStatus } from '@bundle-grep/core'
-import type { EvaluateError, LaunchError, LaunchOptions, LoadError, WindowError } from 'barlo'
+import type { ServeError, UiNotBuiltError } from './desktop.errors'
 
-import type { UiNotBuiltError } from './desktop.errors'
-
-/** Options for {@linkcode createApi}. */
-export interface ApiOptions {
-  /** Where the archive and its search caches live. */
-  layout: ArchiveLayout
-  /** The only `Host` header accepted, such as `"127.0.0.1:53124"`. */
-  host: string
-  /** The per-run secret every `/api/` request must carry in {@linkcode TOKEN_HEADER}. */
-  token: string
-  /** How long a search stream may go quiet before a heartbeat line; 5000 by default. */
-  heartbeatMs?: number
-}
-
-/** Options for {@linkcode searchRoute}. */
-export type SearchRouteOptions = Pick<ApiOptions, 'layout' | 'heartbeatMs'>
-
-/** Options for {@linkcode createBridge}. */
-export interface BridgeOptions {
+/** Where the archive lives and how to reach it, for the routes that read or change it. */
+export interface ArchiveRouteOptions {
   /** Where the archive and its search caches live. */
   layout: ArchiveLayout
   /** The root the layout came from, shown in settings. */
   root: string
+}
+
+/** Options for {@linkcode jobRoutes}. */
+export interface JobRouteOptions extends ArchiveRouteOptions {
   /** The GitHub CLI to run; `gh` on the `PATH` by default. */
   gh?: string
   /** Extra environment for the git that sync runs, such as `GIT_SSH_COMMAND`. */
   syncEnv?: Record<string, string | undefined>
-  /** Stops a running sync or restore when the app closes. */
+  /** Stops a running sync or restore, such as when the server stops. */
   signal?: AbortSignal
+  /** How long a stream may go quiet before a heartbeat line; 5000 by default. */
+  heartbeatMs?: number
 }
 
-/** Why the window could not be opened. */
-export type OpenAppError = LaunchError | EvaluateError | WindowError | LoadError | UiNotBuiltError
+/** The sync and restore routes {@linkcode jobRoutes} builds. */
+export interface JobRoutes {
+  /** `POST /api/sync`. */
+  sync: (request: Request) => Promise<Response>
+  /** `POST /api/restore`. */
+  restore: (request: Request) => Promise<Response>
+}
 
-/** Options for {@linkcode openApp}. */
-export interface OpenAppOptions extends BridgeOptions {
+/** Options for {@linkcode createApi}. */
+export interface ApiOptions extends JobRouteOptions {
+  /** The only `Host` header accepted, such as `"127.0.0.1:53124"`. */
+  host: string
+  /** The per-run secret every `/api/` request must carry in {@linkcode TOKEN_HEADER}. */
+  token: string
+}
+
+/** Answers a request, or declines it with `undefined` so that another handler can. */
+export type ApiHandler = (request: Request) => Response | Promise<Response> | undefined
+
+/** Options for {@linkcode searchRoute}. */
+export type SearchRouteOptions = Pick<ApiOptions, 'layout' | 'heartbeatMs'>
+
+/** Options for {@linkcode ndjsonResponse}. */
+export interface NdjsonResponseOptions {
+  /** How long the stream may go quiet before a heartbeat line; 5000 by default. */
+  heartbeatMs?: number
+  /** Runs when the client cancels the body, before the iterator is ended. */
+  onCancel?: () => void
+  /** Runs once when the stream is over, however it ended. */
+  onClose?: () => void
+}
+
+/** The body of `POST /api/sync`. */
+export interface SyncRequest {
+  /** What to sync, as `bundle-grep sync` takes it: `owner`, `owner/name`, a git URL, or a local path. */
+  sources: string[]
+}
+
+/** Why {@linkcode serveApp} could not start. */
+export type ServeAppError = UiNotBuiltError | ServeError
+
+/** Options for {@linkcode serveApp}. */
+export interface ServeAppOptions extends Omit<JobRouteOptions, 'heartbeatMs'> {
   /** A dev server to proxy the UI from, such as `"http://localhost:5173"`; the embedded UI otherwise. */
   devServer?: string
-  /** Passed to barlo's `launch`. */
-  launch?: LaunchOptions
+  /** The port to listen on; any free one by default. */
+  port?: number
 }
 
-/** Where {@linkcode openApp} gets the UI: a dev server to proxy, or the embedded page. */
+/** A running {@linkcode serveApp}. */
+export interface AppServer {
+  /** The page's URL, with this run's token in its fragment. */
+  url: string
+  /** Stops a running sync or restore and closes every connection. */
+  stop: () => Promise<void>
+}
+
+/** Where {@linkcode serveApp} gets the UI: a dev server to proxy, or the embedded page. */
 export type UiSource =
   | {
       /** The dev server's origin. */
@@ -71,14 +106,11 @@ export interface WireError {
 }
 
 /**
- * What a bridge function resolves to.
- *
- * The bridge turns a thrown error into a bare string on the page, so failures
- * come back as values instead.
+ * What the page's API calls resolve to.
  *
  * @template T What a success carries.
  */
-export type BridgeResult<T> =
+export type ApiResult<T> =
   | {
       /** Discriminant. */
       ok: true
@@ -95,7 +127,7 @@ export type BridgeResult<T> =
 /** Whether an archived repository can be searched. */
 export type RepoState = 'ready' | 'unrestored' | 'empty'
 
-/** One archived repository, as `listRepos` reports it. */
+/** One archived repository, as `GET /api/repos` reports it. */
 export interface RepoRow {
   /** `owner/name`. */
   name: string
@@ -140,7 +172,7 @@ export type SearchStreamEvent =
       type: 'heartbeat'
     }
 
-/** What `listRepos` resolves to. */
+/** What `GET /api/repos` answers with. */
 export interface RepoList {
   /** The repositories, sorted by name. */
   repos: RepoRow[]
@@ -194,7 +226,7 @@ export type RestoreItem =
       error: WireError
     }
 
-/** What `getSettings` resolves to. */
+/** What `GET /api/settings` answers with. */
 export interface Settings {
   /** The root everything lives under. */
   root: string
@@ -204,18 +236,14 @@ export interface Settings {
   cacheDir: string
 }
 
-/** The functions the page can call, keyed by the name they are exposed under. */
-export interface Bridge {
-  /** Lists archived repositories. */
-  bundleGrepListRepos: () => Promise<BridgeResult<RepoList>>
-  /** Syncs sources as `bundle-grep sync` would; one sync or restore runs at a time. */
-  bundleGrepSync: (sources: unknown) => Promise<BridgeResult<SyncItem[]>>
-  /** Rebuilds every search cache from its bundle; one sync or restore runs at a time. */
-  bundleGrepRestore: () => Promise<BridgeResult<RestoreItem[]>>
-  /** Reports where the archive lives. */
-  bundleGrepSettings: () => Promise<BridgeResult<Settings>>
-  /** Lists the names `language:` accepts, popular ones first. */
-  bundleGrepLanguages: () => Promise<BridgeResult<string[]>>
-  /** Lists the languages `symbol:` finds definitions in. */
-  bundleGrepSymbolLanguages: () => Promise<BridgeResult<string[]>>
-}
+/**
+ * One line of a `POST /api/sync` or `POST /api/restore` stream.
+ *
+ * @template T The kind of item: {@linkcode SyncItem} or {@linkcode RestoreItem}.
+ */
+export type JobStreamEvent<T extends SyncItem | RestoreItem> =
+  | T
+  | {
+      /** Nothing happened for a while. */
+      type: 'heartbeat'
+    }

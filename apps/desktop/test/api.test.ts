@@ -39,7 +39,7 @@ function call(
   init: RequestInit & { headers?: Record<string, string> } = {},
   heartbeatMs?: number,
 ): Promise<Response | undefined> {
-  const api = createApi({ layout, host: HOST, token: TOKEN, heartbeatMs })
+  const api = createApi({ layout, root: fixture.root, host: HOST, token: TOKEN, heartbeatMs })
   const headers = { host: HOST, [TOKEN_HEADER]: TOKEN, ...init.headers }
   return Promise.resolve(api(new Request(`http://${HOST}${path}`, { ...init, headers })))
 }
@@ -81,9 +81,24 @@ describe('dispatch and guard', () => {
     expect(await errorOf(await call('/api/nope'))).toEqual({ status: 404, _tag: 'NotFoundError' })
   })
 
-  test('nothing but GET and HEAD is served', async () => {
-    expect(await errorOf(await call('/api/search?q=x', { method: 'POST', body: '{}' }))).toMatchObject({ status: 405 })
-    expect(await errorOf(await call('/api/search?q=x', { method: 'DELETE' }))).toMatchObject({ status: 405 })
+  test('a route answers its own method only', async () => {
+    const origin = { origin: `http://${HOST}` }
+    expect(await errorOf(await call('/api/search?q=x', { method: 'POST', body: '{}', headers: origin }))).toMatchObject({ status: 405 })
+    expect(await errorOf(await call('/api/search?q=x', { method: 'DELETE', headers: origin }))).toMatchObject({ status: 405 })
+    expect(await errorOf(await call('/api/sync'))).toMatchObject({ status: 405 })
+    expect((await call('/api/repos', { method: 'HEAD' }))?.status).toBe(200)
+  })
+
+  test('a request that is not a GET must come from the server\'s own origin', async () => {
+    const restore = (headers: Record<string, string>): Promise<Response | undefined> =>
+      call('/api/restore', { method: 'POST', headers })
+    expect(await errorOf(await restore({}))).toMatchObject({ status: 403 })
+    expect(await errorOf(await restore({ origin: 'http://evil.example' }))).toMatchObject({ status: 403 })
+    expect(await errorOf(await restore({ origin: 'http://127.0.0.1:4101' }))).toMatchObject({ status: 403 })
+  })
+
+  test('an inherited property is not a route', async () => {
+    expect(await errorOf(await call('/api/constructor'))).toEqual({ status: 404, _tag: 'NotFoundError' })
   })
 })
 
@@ -180,7 +195,7 @@ describe('/api/search', () => {
       hostname: '127.0.0.1',
       fetch: async request => {
         seen = request
-        const api = createApi({ layout, host: `127.0.0.1:${server.port}`, token: TOKEN })
+        const api = createApi({ layout, root: fixture.root, host: `127.0.0.1:${server.port}`, token: TOKEN })
         return (await api(request)) ?? new Response('Not found', { status: 404 })
       },
     })

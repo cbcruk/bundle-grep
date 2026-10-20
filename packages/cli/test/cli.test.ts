@@ -232,7 +232,7 @@ describe('bundle-grep', () => {
     })
   })
 
-  test('ui checks its arguments before opening a window', async () => {
+  test('ui checks its arguments before serving', async () => {
     const help = await cli('ui', '--help')
     expect(help.code).toBe(0)
     expect(help.stdout).toStartWith('Usage: bundle-grep ui')
@@ -240,6 +240,31 @@ describe('bundle-grep', () => {
     const bad = await cli('ui', '--dev-server', 'localhost')
     expect(bad.code).toBe(2)
     expect(bad.stderr).toStartWith('--dev-server must be a URL, not "localhost"')
+    for (const port of ['0', '65536', 'http', '1.5']) {
+      const badPort = await cli('ui', '--port', port)
+      expect(badPort.code).toBe(2)
+      expect(badPort.stderr).toStartWith(`--port must be a whole number from 1 to 65535, not "${port}"`)
+    }
+  })
+
+  test('ui serves until interrupted, printing the URL', async () => {
+    using dev = Bun.serve({ hostname: '127.0.0.1', port: 0, fetch: () => new Response('page') })
+    const interrupt = new AbortController()
+    let stdout = ''
+    const running = cliWith(
+      { signal: interrupt.signal, write: text => void (stdout += text) },
+      'ui',
+      '--no-open',
+      '--dev-server',
+      `http://127.0.0.1:${dev.port}`,
+    )
+    while (!stdout.includes('\n')) await Bun.sleep(10)
+    const url = /http:\/\/\S+/.exec(stdout)![0]
+    expect(await (await fetch(url)).text()).toBe('page')
+    interrupt.abort()
+    expect(await running).toMatchObject({ code: 0, stderr: '' })
+    expect(stdout).toBe(`bundle-grep is serving ${url}\nPress Ctrl-C to stop.\n`)
+    await expect(fetch(url)).rejects.toThrow()
   })
 
   test('search rejects bad numbers and missing queries', async () => {

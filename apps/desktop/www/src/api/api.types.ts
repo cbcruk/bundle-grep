@@ -1,18 +1,35 @@
 /**
- * Types for talking to the app's server and bridge.
+ * Types for talking to the app's server.
  *
  * @module
  */
 
-import type { ArchiveSummary, Bridge, BridgeResult, SearchStreamEvent, WireError } from '../../../src/desktop.types'
+import type { ApiResult, ArchiveSummary, SearchStreamEvent, WireError } from '../../../src/desktop.types'
 
-export type { ArchiveSummary, Bridge, BridgeResult, SearchStreamEvent, WireError }
+export type { ApiResult, ArchiveSummary, SearchStreamEvent, WireError }
 
-/** The bridge functions, plus the one that hands out the API token. */
-export type PageBridge = Bridge & {
-  /** Resolves to this run's API token. */
-  bundleGrepToken: () => Promise<string>
+/** What {@linkcode request} sends besides the token. */
+export interface RequestOptions {
+  /** Abandons the request. */
+  signal?: AbortSignal
+  /** `GET` by default. */
+  method?: 'GET' | 'POST'
+  /** Sent as JSON. */
+  body?: unknown
 }
+
+/** What {@linkcode runJob} runs. */
+export type Job =
+  | {
+      /** Sync sources into the archive. */
+      kind: 'sync'
+      /** `owner`, `owner/name`, a git URL, or a local path. */
+      sources: string[]
+    }
+  | {
+      /** Rebuild every search cache from its bundle. */
+      kind: 'restore'
+    }
 
 /** What {@linkcode streamSearch} needs. */
 export interface StreamSearchOptions {

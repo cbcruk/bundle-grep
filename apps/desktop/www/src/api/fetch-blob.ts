@@ -4,7 +4,7 @@
  * @module
  */
 
-import type { BridgeResult } from './api.types'
+import type { ApiResult } from './api.types'
 import { request, thrownError } from './request'
 
 /** The API path for a file at a commit, the repository's `HEAD` by default, with each segment encoded. */
@@ -19,8 +19,8 @@ export async function fetchBlob(
   path: string,
   ref: string | undefined,
   signal: AbortSignal,
-): Promise<BridgeResult<Uint8Array>> {
-  const response = await request(blobPath(repo, path, ref), signal)
+): Promise<ApiResult<Uint8Array>> {
+  const response = await request(blobPath(repo, path, ref), { signal })
   if (!response.ok) return response
   try {
     return { ok: true, value: new Uint8Array(await response.value.arrayBuffer()) }

@@ -1,7 +1,8 @@
 import { useEffect, useState, type FormEvent } from 'react'
 
-import type { BridgeResult } from '../../api/api.types'
-import { bridge } from '../../api/bridge'
+import type { WireError } from '../../api/api.types'
+import { getSettings } from '../../api/load-archive'
+import { runJob } from '../../api/run-job'
 import type { RestoreItem, Settings, SyncItem } from '../../../../src/desktop.types'
 import { Link } from '../link/link'
 import type { ReposViewProps } from './repos-view.types'
@@ -10,31 +11,31 @@ import './repos-view.css'
 
 /**
  * The archive: every repository and its state, a form to sync more, and a
- * button to rebuild search caches. Sync and restore run one at a time.
+ * button to rebuild search caches. Sync and restore run one at a time, and
+ * list what happened to each repository as it happens.
  */
 export function ReposView({ query, repos, onChanged }: ReposViewProps): React.JSX.Element {
   const [sources, setSources] = useState('')
   const [running, setRunning] = useState<'sync' | 'restore'>()
-  const [outcome, setOutcome] = useState<BridgeResult<(SyncItem | RestoreItem)[]>>()
+  const [items, setItems] = useState<(SyncItem | RestoreItem)[]>()
+  const [failure, setFailure] = useState<WireError>()
   const [settings, setSettings] = useState<Settings>()
 
   useEffect(() => {
-    void bridge()
-      .bundleGrepSettings()
-      .then(result => {
-        if (result.ok) setSettings(result.value)
-      })
+    void getSettings().then(result => {
+      if (result.ok) setSettings(result.value)
+    })
   }, [])
 
   const run = async (kind: 'sync' | 'restore'): Promise<void> => {
     setRunning(kind)
-    setOutcome(undefined)
-    const list = sources.split(/\s+/).filter(Boolean)
-    const result: BridgeResult<(SyncItem | RestoreItem)[]> =
-      kind === 'sync' ? await bridge().bundleGrepSync(list) : await bridge().bundleGrepRestore()
+    setItems([])
+    setFailure(undefined)
+    const job = kind === 'sync' ? { kind, sources: sources.split(/\s+/).filter(Boolean) } : { kind }
+    const result = await runJob(job, item => setItems(done => [...(done ?? []), item]))
     setRunning(undefined)
-    setOutcome(result)
-    if (result.ok && kind === 'sync') setSources('')
+    if (!result.ok) setFailure(result.error)
+    else if (kind === 'sync') setSources('')
     onChanged()
   }
 
@@ -73,11 +74,11 @@ export function ReposView({ query, repos, onChanged }: ReposViewProps): React.JS
         </div>
       </form>
 
-      {outcome && !outcome.ok && <p className="notice danger">{outcome.error.message}</p>}
-      {outcome?.ok && (
+      {failure && <p className="notice danger">{failure.message}</p>}
+      {items && (items.length > 0 || (!running && !failure)) && (
         <ul className="repos-view-outcome">
-          {outcome.value.length === 0 && <li>Nothing to do.</li>}
-          {outcome.value.map((item, index) => {
+          {items.length === 0 && <li>Nothing to do.</li>}
+          {items.map((item, index) => {
             const { subject, text, failed } = itemText(item)
             return (
               <li key={index} className={failed ? 'danger' : undefined}>

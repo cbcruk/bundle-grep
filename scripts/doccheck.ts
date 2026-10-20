@@ -90,7 +90,6 @@ try {
           '@bundle-grep/core': [join(ROOT, 'packages/core/src/index.ts')],
           '@bundle-grep/core/query': [join(ROOT, 'packages/core/src/query/index.ts')],
           '@bundle-grep/desktop': [join(ROOT, 'apps/desktop/src/index.ts')],
-          barlo: [join(ROOT, 'apps/desktop/node_modules/barlo')],
         },
       },
       files: [...files, join(ROOT, 'packages/core/src/assets.d.ts')],

@@ -38,7 +38,7 @@ bundle-grep sync git@example.com:a/b.git # any git URL, or a local path such as 
 bundle-grep search useState language:typescript -is:fork
 bundle-grep list
 bundle-grep restore                      # rebuild search caches from the bundles
-bundle-grep ui                           # open the search window (needs a local Chrome)
+bundle-grep ui                           # serve the search page and open it in your browser
 ```
 
 Everything lives under `--root`, else `$BUNDLE_GREP_ROOT`, else
@@ -46,6 +46,12 @@ Everything lives under `--root`, else `$BUNDLE_GREP_ROOT`, else
 `restore` can always rebuild, in `cache/`. `search` exits 0 when something
 matched, 1 when nothing did, and 2 on an error. With `--json`, `list` prints a
 JSON array and the other commands one JSON object per line.
+
+`ui` serves the search page on `127.0.0.1` and opens it in the default
+browser. It also prints the URL, for `--no-open` or a browser that did not
+start, and runs until Ctrl-C. The URL ends in `#token=…`, a secret made for
+that run that the page needs to reach the archive, so open the URL as
+printed. Requests from other sites, or for another host name, are refused.
 
 ### Keeping the archive current
 
@@ -166,9 +172,9 @@ pnpm docs:check
 pnpm test
 ```
 
-The search window's UI is a Vite + React app in `apps/desktop/www`. Build it
+The search page is a Vite + React app in `apps/desktop/www`. Build it
 into one HTML file before running `bundle-grep ui` or compiling a binary, or
-work on it with the dev server:
+work on it with the dev server, which `ui --dev-server` proxies:
 
 ```sh
 pnpm build:ui                                          # apps/desktop/www/dist/index.html
@@ -187,7 +193,7 @@ runner can execute, and publishes them as a GitHub release.
 and 500 repositories; [docs/performance.md](docs/performance.md) has the
 numbers and where the time goes.
 
-In the window, `/` focuses the search box, `j`/`k` move between results,
+In the search page, `/` focuses the search box, `j`/`k` move between results,
 `Enter` opens one, and `Esc` goes back.
 
 ## Packages
@@ -196,4 +202,4 @@ In the window, `/` focuses the search box, `j`/`k` move between results,
 | --- | --- |
 | `packages/core` | Sync and restore bundles, parse and compile queries, run searches |
 | `packages/cli` | The `bundle-grep` command |
-| `apps/desktop` | The search window: a [barlo](https://github.com/cbcruk/barlo) app over a local-only server |
+| `apps/desktop` | The search page and the local-only server behind it |

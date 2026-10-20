@@ -10,7 +10,7 @@ export default defineConfig({
     host: '127.0.0.1',
     port: 5173,
     strictPort: true,
-    // barlo proxies plain HTTP only, so the HMR socket goes to Vite directly.
+    // The app server proxies plain HTTP only, so the HMR socket goes to Vite directly.
     hmr: { clientPort: 5173 },
   },
   build: {

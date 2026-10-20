@@ -4,7 +4,7 @@
  * @module
  */
 
-import type { BridgeResult, SearchStreamEvent } from '../api/api.types'
+import type { ApiResult, SearchStreamEvent } from '../api/api.types'
 import type { SearchState } from './use-search.types'
 
 /** The state before a query is typed. */
@@ -32,6 +32,6 @@ export function applyEvent(state: SearchState, event: SearchStreamEvent): Search
 }
 
 /** Ends the search with how the stream ended. */
-export function finishSearch(state: SearchState, result: BridgeResult<void>): SearchState {
+export function finishSearch(state: SearchState, result: ApiResult<void>): SearchState {
   return result.ok ? { ...state, status: 'done' } : { ...state, status: 'error', error: result.error }
 }

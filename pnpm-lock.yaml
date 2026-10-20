@@ -23,9 +23,6 @@ importers:
       '@bundle-grep/core':
         specifier: workspace:*
         version: link:../../packages/core
-      barlo:
-        specifier: ^0.1.3
-        version: 0.1.3
       better-result:
         specifier: ^3.0.1
         version: 3.0.1
@@ -475,10 +472,6 @@ packages:
         optional: true
       oxc-transform-react:
         optional: true
-
-  barlo@0.1.3:
-    resolution: {integrity: sha512-hjoDTxE7mRFVdO/BEcTm0NtzFFX0xdqYv+FWwUci4svgSAnREm/Cb07BFjXuVq8QrBi3xFgKXl6p7YJcOD4VMw==}
-    engines: {bun: '>=1.3.12'}
 
   better-result@3.0.1:
     resolution: {integrity: sha512-rnCeqEXkKPHmz5MO5ZroPRDyHe4YvlNPyy7qj8cVcWs/GnvSvC3086G74/220W+wWcIWlXgzvcjskFV0A4blUQ==}
@@ -984,10 +977,6 @@ snapshots:
     dependencies:
       '@rolldown/pluginutils': 1.0.1
       vite: 8.3.4(@types/node@26.6.5)
-
-  barlo@0.1.3:
-    dependencies:
-      better-result: 3.0.1
 
   better-result@3.0.1: {}
 
