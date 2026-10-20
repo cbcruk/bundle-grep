@@ -43,8 +43,9 @@ export type Pattern =
  * - `content`: only the contents, from `content:`.
  * - `path`: only the path, from `path:`.
  * - `symbol`: the names of the definitions in a file, from `symbol:`.
+ * - `history`: the lines commits added or removed, from `history:`.
  */
-export type MatchField = 'any' | 'content' | 'path' | 'symbol'
+export type MatchField = 'any' | 'content' | 'path' | 'symbol' | 'history'
 
 /** A pattern that has to match a file's contents or path. */
 export interface MatchNode {
@@ -58,8 +59,8 @@ export interface MatchNode {
   span: Span
 }
 
-/** Qualifier keys that select repositories or files rather than matching text. */
-export type FilterKey = 'repo' | 'org' | 'user' | 'language' | 'is'
+/** Qualifier keys that select repositories, files, or the tree searched rather than matching text. */
+export type FilterKey = 'repo' | 'org' | 'user' | 'language' | 'is' | 'ref'
 
 /** Values accepted by the `is:` qualifier. */
 export type IsValue = 'fork' | 'archived'

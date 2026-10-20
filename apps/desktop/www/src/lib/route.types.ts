@@ -26,6 +26,8 @@ export type Route =
       repo: string
       /** The path in the repository. */
       path: string
+      /** The commit to show the file at, as a full id; `HEAD` when absent. */
+      ref?: string
       /** The 1-based line to scroll to and mark, if any. */
       line?: number
     }

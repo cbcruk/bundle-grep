@@ -115,6 +115,14 @@ describe('/api/search', () => {
     ])
   })
 
+  test('history: streams commit events, and the blob route serves a file at the commit', async () => {
+    const events = await lines(await call('/api/search?q=history:useState'))
+    const commit = events.find(event => event.type === 'commit') as { commit: { sha: string; parent: null }; files: { path: string }[] }
+    expect(commit).toMatchObject({ repo: 'me/app', commit: { sha: fixture.git('rev-parse', 'HEAD'), parent: null }, files: [{ path: 'src/counter.ts' }] })
+    expect(events.at(-1)).toMatchObject({ type: 'done', totalCommits: 1 })
+    expect(await (await call(`/api/blob/me/app/${commit.commit.sha}/src/counter.ts`))?.text()).toStartWith('import')
+  })
+
   test('limit and context are passed on', async () => {
     const limited = await lines(await call('/api/search?q=e&limit=1'))
     expect(limited.filter(event => event.type === 'file')).toHaveLength(1)

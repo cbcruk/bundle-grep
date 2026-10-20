@@ -162,6 +162,39 @@ describe('bundle-grep', () => {
     expect(events[0].lines[0]).toMatchObject({ number: 1, column: 9, ranges: [{ start: 9, end: 17 }] })
   })
 
+  test('search history: prints each commit, then its changes as path:+line:text', async () => {
+    const sha = fixture.git('rev-parse', '--short=7', 'HEAD')
+    expect(await cli('search', 'history:useState repo:acme/app')).toEqual({
+      code: 0,
+      stdout: `acme/app\n${sha} 2026-01-01 init\nsrc/counter.ts:+1:import { useState } from "react"\nsrc/counter.ts:+3:export const n = useState(0)\n`,
+      stderr: '1 commit in 1 repository\n',
+    })
+    const limited = await cli('search', '--limit', '1', 'history:useState')
+    expect(limited.stderr).toBe('4 commits in 4 repositories, showing 1; raise --limit for more\n')
+    expect(await cli('search', 'history:nothing-here-at-all')).toEqual({ code: 1, stdout: '', stderr: '0 commits in 0 repositories\n' })
+  })
+
+  test('search history: --json prints commit events', async () => {
+    const found = await cli('search', '--json', 'history:useState path:src repo:acme/app')
+    const events = found.stdout.trimEnd().split('\n').map(line => JSON.parse(line))
+    expect(events.map(event => event.type)).toEqual(['commit', 'done'])
+    expect(events[0]).toMatchObject({
+      repo: 'acme/app',
+      commit: { sha: fixture.git('rev-parse', 'HEAD'), parent: null, author: 'Fixture', subject: 'init' },
+      files: [{ path: 'src/counter.ts', lines: [{ change: 'added', number: 1, ranges: [{ start: 9, end: 17 }] }, { number: 3 }] }],
+    })
+    expect(events[1]).toMatchObject({ totalCommits: 1 })
+  })
+
+  test('search ref: searches another revision', async () => {
+    const found = await cli('search', '--json', 'ref:main useState repo:acme/app')
+    expect(JSON.parse(found.stdout.split('\n')[0]!)).toMatchObject({ path: 'src/counter.ts', commit: fixture.git('rev-parse', 'HEAD') })
+    expect((await cli('search', 'ref:nope useState')).code).toBe(1)
+    const bad = await cli('search', 'history:x foo')
+    expect(bad.code).toBe(2)
+    expect(bad.stderr).toContain('history: can only be combined with')
+  })
+
   test('search points at a query error', async () => {
     expect(await cli('search', 'x language:nope')).toEqual({
       code: 2,

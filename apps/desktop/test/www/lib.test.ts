@@ -1,6 +1,8 @@
 import { describe, expect, test } from 'bun:test'
 
-import type { SearchLine } from '@bundle-grep/core'
+import type { ChangedLine, SearchLine } from '@bundle-grep/core'
+
+import type { CommitResult, FileResult } from '../../www/src/hooks/use-search.types'
 
 import { blobLines } from '../../www/src/lib/blob-text'
 import { groupByRepo } from '../../www/src/lib/group'
@@ -8,7 +10,8 @@ import { hunks, segments } from '../../www/src/lib/highlight'
 import { isPageKey, isTyping } from '../../www/src/lib/keyboard'
 import { readNdjson } from '../../www/src/lib/ndjson'
 import { parseRoute, routeSearch } from '../../www/src/lib/route'
-import { usesSymbol } from '../../www/src/components/results/results.utils'
+import { changeRoute, commitRoute, fileRoute, routeHighlights } from '../../www/src/lib/result-route'
+import { usesHistory, usesSymbol } from '../../www/src/components/results/results.utils'
 
 describe('usesSymbol', () => {
   test('finds a positive symbol: qualifier anywhere in a query that parses', () => {
@@ -17,6 +20,45 @@ describe('usesSymbol', () => {
     expect(usesSymbol('a -symbol:x')).toBe(false)
     expect(usesSymbol('symbol')).toBe(false)
     expect(usesSymbol('symbol:foo (')).toBe(false)
+  })
+})
+
+describe('usesHistory', () => {
+  test('finds a history: qualifier that is not negated', () => {
+    expect(usesHistory('history:foo path:src')).toBe(true)
+    expect(usesHistory('-history:foo')).toBe(false)
+    expect(usesHistory('foo')).toBe(false)
+  })
+})
+
+describe('result routes', () => {
+  const commit = { sha: 'c'.repeat(40), parent: 'p'.repeat(40), date: '2026-01-01T00:00:00Z', author: 'Me', subject: 's' }
+  const added: ChangedLine = { change: 'added', number: 3, text: 'new', ranges: [{ start: 0, end: 3 }] }
+  const removed: ChangedLine = { change: 'removed', number: 5, text: 'old', ranges: [{ start: 0, end: 1 }] }
+  const result: CommitResult = { type: 'commit', repo: 'me/app', commit, files: [{ path: 'a.ts', lines: [removed, added] }] }
+
+  test('a file opens at its first match, at the ref: commit it was found in', () => {
+    const lines = [{ number: 1, text: '', context: true, ranges: [] }, { number: 2, text: 'x', context: false, ranges: [] }]
+    expect(fileRoute('q', { type: 'file', repo: 'me/app', path: 'a.ts', lines })).toEqual({ view: 'file', q: 'q', repo: 'me/app', path: 'a.ts', line: 2 })
+    expect(fileRoute('q', { type: 'file', repo: 'me/app', path: 'a.ts', lines, commit: commit.sha }, 7)).toMatchObject({ ref: commit.sha, line: 7 })
+  })
+
+  test('an added line opens at the commit and a removed one at its parent', () => {
+    expect(changeRoute('q', 'me/app', commit, 'a.ts', added)).toMatchObject({ ref: commit.sha, line: 3 })
+    expect(changeRoute('q', 'me/app', commit, 'a.ts', removed)).toMatchObject({ ref: commit.parent, line: 5 })
+    expect(changeRoute('q', 'me/app', { ...commit, parent: null }, 'a.ts', removed)).not.toHaveProperty('line')
+    expect(commitRoute('q', result)).toMatchObject({ path: 'a.ts', ref: commit.parent, line: 5 })
+    expect(commitRoute('q', { ...result, files: [] })).toBeUndefined()
+  })
+
+  test('the file view highlights the side of each change it shows', () => {
+    const route = { view: 'file', q: 'q', repo: 'me/app', path: 'a.ts' } as const
+    expect([...routeHighlights({ ...route, ref: commit.sha }, [], [result])]).toEqual([[3, added.ranges]])
+    expect([...routeHighlights({ ...route, ref: commit.parent }, [], [result])]).toEqual([[5, removed.ranges]])
+    expect([...routeHighlights({ ...route, path: 'b.ts', ref: commit.sha }, [], [result])]).toEqual([])
+    const file: FileResult = { type: 'file', repo: 'me/app', path: 'a.ts', lines: [{ number: 2, text: 'x', context: false, ranges: [{ start: 0, end: 1 }] }] }
+    expect([...routeHighlights(route, [file], [])]).toEqual([[2, [{ start: 0, end: 1 }]]])
+    expect([...routeHighlights({ ...route, ref: commit.sha }, [file], [])]).toEqual([])
   })
 })
 
@@ -56,6 +98,7 @@ describe('route', () => {
       { view: 'repos', q: 'x' },
       { view: 'file', q: 'x', repo: 'me/app', path: 'src/a b.ts', line: 12 },
       { view: 'file', q: '', repo: 'me/app', path: 'README.md' },
+      { view: 'file', q: 'history:x', repo: 'me/app', path: 'a.ts', ref: 'a'.repeat(40), line: 3 },
     ] as const) {
       expect(parseRoute(routeSearch(route))).toEqual(route)
     }
@@ -66,6 +109,7 @@ describe('route', () => {
     expect(parseRoute('?view=file&repo=me/app&q=x')).toEqual({ view: 'search', q: 'x' })
     expect(parseRoute('?view=nope')).toEqual({ view: 'search', q: '' })
     expect(parseRoute('?view=file&repo=a/b&path=c&line=-1')).toEqual({ view: 'file', q: '', repo: 'a/b', path: 'c' })
+    expect(parseRoute('?view=file&repo=a/b&path=c&ref=main')).toEqual({ view: 'file', q: '', repo: 'a/b', path: 'c' })
   })
 })
 

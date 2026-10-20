@@ -7,15 +7,20 @@
 import type { BridgeResult } from './api.types'
 import { request, thrownError } from './request'
 
-/** The API path for a file at the repository's `HEAD`, with each segment encoded. */
-export function blobPath(repo: string, path: string): string {
-  const segments = [...repo.split('/'), 'HEAD', ...path.split('/')]
+/** The API path for a file at a commit, the repository's `HEAD` by default, with each segment encoded. */
+export function blobPath(repo: string, path: string, ref = 'HEAD'): string {
+  const segments = [...repo.split('/'), ref, ...path.split('/')]
   return `/api/blob/${segments.map(encodeURIComponent).join('/')}`
 }
 
-/** Reads a file's bytes at the repository's `HEAD`. */
-export async function fetchBlob(repo: string, path: string, signal: AbortSignal): Promise<BridgeResult<Uint8Array>> {
-  const response = await request(blobPath(repo, path), signal)
+/** Reads a file's bytes at a commit, or at the repository's `HEAD` when `ref` is absent. */
+export async function fetchBlob(
+  repo: string,
+  path: string,
+  ref: string | undefined,
+  signal: AbortSignal,
+): Promise<BridgeResult<Uint8Array>> {
+  const response = await request(blobPath(repo, path, ref), signal)
   if (!response.ok) return response
   try {
     return { ok: true, value: new Uint8Array(await response.value.arrayBuffer()) }

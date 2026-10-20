@@ -8,15 +8,17 @@ import { Result } from 'better-result'
 
 import { GitError } from '../git/git.errors'
 import { isEmptyRepo } from '../git/is-empty-repo'
+import { resolveCommit } from '../git/resolve-commit'
 import { runGit } from '../git/run-git'
 import { grepArgs } from '../plan/grep-args'
 import { languageOf } from '../plan/languages'
 import { listMatchingFiles } from '../plan/list-matching-files'
-import type { FileExpr, GrepLeaf } from '../plan/plan.types'
+import type { FileExpr, GrepLeaf, HistoryPattern } from '../plan/plan.types'
 import { specializePlan } from '../plan/specialize-plan'
 import type { Pattern } from '../query/query.types'
 import { symbolIndex } from '../symbols/symbol-index'
 import type { SymbolIndex, SymbolIndexError } from '../symbols/symbols.types'
+import { describeCommits, matchingCommits } from './history'
 import { byteColumnToIndex, createHighlighter } from './match-ranges'
 import { parseGrepOutput } from './parse-grep-output'
 import { PcreUnavailableError } from './search.errors'
@@ -151,6 +153,13 @@ function count(record: Record<string, number>, key: string): void {
  * `file` events stopped at the limit. A `holds` callback that throws rejects
  * the search instead.
  *
+ * A plan with a `ref:` searches the commit it names in each repository,
+ * skipping repositories without it, and its `file` events carry that commit.
+ * A plan with `history:` yields `commit` events instead of `file` events:
+ * the commits reachable from `HEAD`, or from the `ref:`, whose added or
+ * removed lines match, newest first, each with the matching lines of the
+ * files that `path:` and `language:` keep.
+ *
  * Stopping early — breaking out of the loop, aborting
  * {@linkcode SearchOptions.signal}, or reaching
  * {@linkcode SearchOptions.timeoutMs} — kills any git still running.
@@ -193,30 +202,72 @@ export async function* search<Repo extends SearchRepo>(
 
   const facets: SearchFacets = { languages: {}, repos: {}, paths: {} }
   let totalFiles = 0
+  let totalCommits = 0
   let reserved = 0
   let emitted = 0
+
+  const failed = async (repo: Repo, error: SymbolIndexError): Promise<void> => {
+    const empty = repo.ref === undefined && (await isEmptyRepo(repo.gitDir, stop)).unwrapOr(false)
+    if (stop.aborted || empty) return
+    push({ type: 'repo-error', repo: repo.name, error: toSearchRepoError(error) })
+  }
+
+  const lost = (repo: Repo, shown: number, error: GitError): void => {
+    reserved -= shown
+    push({ type: 'repo-error', repo: repo.name, error: toSearchRepoError(error) })
+  }
+
+  const searchHistory = async (repo: Repo, expr: FileExpr, ref: string, history: HistoryPattern): Promise<void> => {
+    const commits = await matchingCommits({ gitDir: repo.gitDir, ref, history, expr, signal: stop })
+    if (stop.aborted) return
+    if (commits.isErr()) return failed(repo, commits.error)
+
+    const shown = commits.value.slice(0, Math.max(0, limit - reserved))
+    reserved += shown.length
+    const described = await describeCommits({ gitDir: repo.gitDir, commits: shown, history, maxMatchesPerFile, signal: stop })
+    if (stop.aborted) return
+    if (described.isErr()) return lost(repo, shown.length, described.error)
+
+    for (const commit of commits.value) {
+      totalCommits++
+      count(facets.repos, repo.name)
+      for (const path of commit.files) {
+        totalFiles++
+        count(facets.paths, path.includes('/') ? path.slice(0, path.indexOf('/')) : '')
+        const language = languageOf(path)
+        if (language) count(facets.languages, language)
+      }
+    }
+    for (const { commit, files } of described.value) {
+      emitted++
+      push({ type: 'commit', repo: repo.name, commit, files })
+    }
+  }
 
   const searchRepo = async (repo: Repo): Promise<void> => {
     const expr = specializePlan(plan.expr, filter => holds(repo, filter))
     if (expr.op === 'none') return
-    const ref = repo.ref ?? 'HEAD'
-    const failed = async (error: SymbolIndexError): Promise<void> => {
-      const empty = repo.ref === undefined && (await isEmptyRepo(repo.gitDir, stop)).unwrapOr(false)
-      if (stop.aborted || empty) return
-      push({ type: 'repo-error', repo: repo.name, error: toSearchRepoError(error) })
+    let ref = repo.ref ?? 'HEAD'
+    if (plan.ref !== undefined) {
+      const resolved = await resolveCommit(repo.gitDir, plan.ref, stop)
+      if (stop.aborted) return
+      if (resolved.isErr()) return failed(repo, resolved.error)
+      if (resolved.value === undefined) return
+      ref = resolved.value
     }
+    if (plan.history) return searchHistory(repo, expr, ref, plan.history)
 
     let symbols: SymbolIndex | undefined
     if (hasSymbolLeaf(expr)) {
       const index = await symbolIndex(repo.gitDir, { ref, signal: stop })
       if (stop.aborted) return
-      if (index.isErr()) return failed(index.error)
+      if (index.isErr()) return failed(repo, index.error)
       symbols = index.value
     }
 
     const files = await listMatchingFiles({ gitDir: repo.gitDir, expr, ref, symbols, signal: stop })
     if (stop.aborted) return
-    if (files.isErr()) return failed(files.error)
+    if (files.isErr()) return failed(repo, files.error)
 
     const languages = new Map(files.value.map(path => [path, languageOf(path)]))
     const shown = files.value.slice(0, Math.max(0, limit - reserved))
@@ -231,12 +282,8 @@ export async function* search<Repo extends SearchRepo>(
         : Result.ok(new Map<string, SearchLine[]>()),
     ])
     if (stop.aborted) return
-    const lost = (error: GitError): void => {
-      reserved -= shown.length
-      push({ type: 'repo-error', repo: repo.name, error: toSearchRepoError(error) })
-    }
-    if (lines.isErr()) return lost(lines.error)
-    if (symbolLines.isErr()) return lost(symbolLines.error)
+    if (lines.isErr()) return lost(repo, shown.length, lines.error)
+    if (symbolLines.isErr()) return lost(repo, shown.length, symbolLines.error)
 
     for (const [path, language] of languages) {
       totalFiles++
@@ -247,7 +294,8 @@ export async function* search<Repo extends SearchRepo>(
     for (const path of shown) {
       emitted++
       const found = mergeLines(lines.value.get(path) ?? [], symbolLines.value.get(path) ?? [])
-      push({ type: 'file', repo: repo.name, path, language: languages.get(path), lines: found })
+      const commit = plan.ref === undefined ? {} : { commit: ref }
+      push({ type: 'file', repo: repo.name, path, language: languages.get(path), lines: found, ...commit })
     }
   }
 
@@ -275,7 +323,15 @@ export async function* search<Repo extends SearchRepo>(
     await all
 
     const stopped = options.signal?.aborted ? 'aborted' : timeout?.aborted ? 'timeout' : undefined
-    yield { type: 'done', totalFiles, facets, truncated: totalFiles > emitted, ...(stopped ? { stopped } : {}) }
+    const truncated = (plan.history ? totalCommits : totalFiles) > emitted
+    yield {
+      type: 'done',
+      totalFiles,
+      ...(plan.history ? { totalCommits } : {}),
+      facets,
+      truncated,
+      ...(stopped ? { stopped } : {}),
+    }
   } finally {
     finished.abort()
     await all.catch(() => undefined)

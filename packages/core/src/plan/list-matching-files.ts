@@ -11,6 +11,7 @@ import { symbolMatcher } from '../symbols/match-symbols'
 import { symbolIndex } from '../symbols/symbol-index'
 import type { SymbolIndex, SymbolIndexError } from '../symbols/symbols.types'
 import { grepArgs } from './grep-args'
+import { matchesLanguage } from './match-path'
 import type { FileExpr, LanguageLeaf, ListMatchingFilesOptions } from './plan.types'
 
 type FileSet = Result<Set<string>, SymbolIndexError>
@@ -24,15 +25,6 @@ function languagePathspecs(leaf: LanguageLeaf): string[] {
     ...leaf.extensions.map(extension => `:(glob,icase)**/*${escapeGlob(extension)}`),
     ...leaf.filenames.map(filename => `:(glob,icase)**/${escapeGlob(filename)}`),
   ]
-}
-
-function matchesLanguage(leaf: LanguageLeaf, path: string): boolean {
-  const lower = path.toLowerCase()
-  const name = lower.slice(lower.lastIndexOf('/') + 1)
-  return (
-    leaf.extensions.some(extension => lower.endsWith(extension.toLowerCase())) ||
-    leaf.filenames.some(filename => name === filename.toLowerCase())
-  )
 }
 
 /**

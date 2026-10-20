@@ -1,4 +1,5 @@
 import { hunks, segments } from '../../lib/highlight'
+import { fileRoute } from '../../lib/result-route'
 import { Link } from '../link/link'
 import { CodeLine } from './code-line'
 import type { FileResultProps } from './file-result.types'
@@ -6,8 +7,7 @@ import './file-result.css'
 
 /** One matching file: its path, language, and matching lines with their context. */
 export function FileResult({ query, file, selected, ref }: FileResultProps): React.JSX.Element {
-  const first = file.lines.find(line => !line.context)?.number
-  const open = { view: 'file', q: query, repo: file.repo, path: file.path, ...(first ? { line: first } : {}) } as const
+  const open = fileRoute(query, file)
   return (
     <article ref={ref} className={selected ? 'file-result selected' : 'file-result'} aria-current={selected || undefined}>
       <header className="file-result-header">
@@ -27,7 +27,7 @@ export function FileResult({ query, file, selected, ref }: FileResultProps): Rea
                   <CodeLine
                     key={line.number}
                     number={line.number}
-                    to={{ ...open, line: line.number }}
+                    to={fileRoute(query, file, line.number)}
                     segments={segments(line.text, line.ranges)}
                     context={line.context}
                   />

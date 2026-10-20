@@ -28,6 +28,7 @@ export type {
   FileLeaf,
   FilterLeaf,
   GrepLeaf,
+  HistoryPattern,
   Language,
   LanguageLeaf,
   ListMatchingFilesOptions,
@@ -35,15 +36,20 @@ export type {
   PathLeaf,
   QueryExpr,
   SearchPlan,
+  SplitQuery,
   SymbolLeaf,
   ValidateRegexesOptions,
 } from './plan/plan.types'
+export { splitQuery } from './plan/split-query'
 export { specializePlan } from './plan/specialize-plan'
 export { validateRegexes } from './plan/validate-regexes'
 export { parseQuery } from './query/parse-query'
 export { PcreUnavailableError } from './search/search.errors'
 export { search, toSearchRepoError } from './search/search'
 export type {
+  ChangedFile,
+  ChangedLine,
+  CommitInfo,
   MatchRange,
   SearchEvent,
   SearchFacets,

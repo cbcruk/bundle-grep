@@ -20,7 +20,7 @@ import type { Command, Io } from '../cli.types'
 import { EXIT } from '../exit-codes'
 import { stylesFor } from '../format/ansi'
 import { formatQueryError } from '../format/query-error'
-import { formatFile, formatRepoHeading, formatSummary } from '../format/search-output'
+import { formatCommit, formatFile, formatRepoHeading, formatSummary } from '../format/search-output'
 import { formatNotice } from '../format/status-line'
 import { layoutFor } from '../layout'
 
@@ -33,8 +33,13 @@ Words of the query may be given as separate arguments; they are joined with
 spaces, and negated words such as -is:fork need no quoting. Put -- before a
 word that starts with --. Results print as path:line:column:text, grouped by repository.
 
+ref:<branch|tag|sha> searches that revision instead of the default branch.
+history:<pattern> searches the lines commits added or removed, newest first,
+printing each commit as sha date subject and its changes as path:+line:text
+or path:-line:text; --limit then counts commits.
+
 Options:
-  --limit <n>        most files to show (default 100)
+  --limit <n>        most files, or commits for history:, to show (default 100)
   -C, --context <n>  lines of context around each match (default 0)
   --root <dir>       where the archive lives (default $BUNDLE_GREP_ROOT or ~/.bundle-grep)
   --json             print one JSON object per event
@@ -110,14 +115,14 @@ async function run(args: string[], io: Io): Promise<number> {
       continue
     }
     if (values.json) io.write(`${JSON.stringify(event)}\n`)
-    if (event.type === 'file') {
+    if (event.type === 'file' || event.type === 'commit') {
       shown++
       if (values.json) continue
       if (event.repo !== current) io.write(formatRepoHeading(event.repo, current === undefined, styles))
       current = event.repo
-      io.write(formatFile(event, styles, context > 0))
+      io.write(event.type === 'file' ? formatFile(event, styles, context > 0) : formatCommit(event, styles))
     } else {
-      matched = event.totalFiles > 0
+      matched = (event.totalCommits ?? event.totalFiles) > 0
       if (values.json) continue
       io.error(`${errors.dim(formatSummary(event, shown))}\n`)
       if (!matched && plan.symbols.length > 0) {

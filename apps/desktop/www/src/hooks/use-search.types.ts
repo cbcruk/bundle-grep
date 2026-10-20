@@ -9,6 +9,9 @@ import type { ArchiveSummary, SearchStreamEvent, WireError } from '../api/api.ty
 /** One matching file, as the stream sends it. */
 export type FileResult = Extract<SearchStreamEvent, { type: 'file' }>
 
+/** One commit a `history:` search found, as the stream sends it. */
+export type CommitResult = Extract<SearchStreamEvent, { type: 'commit' }>
+
 /** The last line of the stream: totals and facets. */
 export type SearchDone = Extract<SearchStreamEvent, { type: 'done' }>
 
@@ -23,6 +26,8 @@ export interface SearchState {
   archive?: ArchiveSummary
   /** Matching files, in the order they arrived. */
   files: FileResult[]
+  /** Matching commits of a `history:` search, in the order they arrived. */
+  commits: CommitResult[]
   /** Repositories that failed; the rest of the search carried on. */
   failures: RepoFailure[]
   /** Totals and facets, once the search is over. */

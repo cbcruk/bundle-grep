@@ -21,38 +21,41 @@ import type { GrepLeaf, ValidateRegexesOptions } from './plan.types'
 interface Regex {
   source: string
   span: Span
+  engine: 'pcre' | 'history'
 }
 
-/** Collects the regexes git will run as PCRE, first occurrence of each, in query order. */
-function contentRegexes(node: QueryNode, into: Map<string, Regex>): Map<string, Regex> {
+/** Collects the regexes git will run, as PCRE or as `history:`'s extended regexes, first occurrence of each, in query order. */
+function gitRegexes(node: QueryNode, into: Map<string, Regex>): Map<string, Regex> {
   switch (node.type) {
     case 'match': {
       const { field, pattern, span } = node
-      if (pattern.kind === 'regex' && field !== 'path' && field !== 'symbol' && !into.has(pattern.source)) {
-        into.set(pattern.source, { source: pattern.source, span })
-      }
+      if (pattern.kind !== 'regex' || field === 'path' || field === 'symbol') break
+      const engine = field === 'history' ? 'history' : 'pcre'
+      const source = engine === 'history' ? pattern.source.replace(/^\(\?-i\)/, '') : pattern.source
+      if (!into.has(`${engine}:${source}`)) into.set(`${engine}:${source}`, { source, span, engine })
       break
     }
     case 'filter':
       break
     case 'not':
-      contentRegexes(node.child, into)
+      gitRegexes(node.child, into)
       break
     case 'and':
     case 'or':
-      for (const child of node.children) contentRegexes(child, into)
+      for (const child of node.children) gitRegexes(child, into)
   }
   return into
 }
 
 /**
- * Finds the reason in git's `fatal: -e option, '<source>': <reason>` line.
+ * Finds the reason in git's `fatal: -e option, '<source>': <reason>` line, or
+ * its `fatal: invalid regex: <reason>` line for `history:`.
  *
  * @returns The reason, or `undefined` when git failed for something other
  * than the pattern, such as a broken config file.
  */
-function reasonOf(stderr: string, source: string): string | undefined {
-  const prefix = `fatal: -e option, '${source}': `
+function reasonOf(stderr: string, { source, engine }: Regex): string | undefined {
+  const prefix = engine === 'history' ? 'fatal: invalid regex: ' : `fatal: -e option, '${source}': `
   return stderr
     .split(/\r?\n/)
     .find(line => line.startsWith(prefix))
@@ -66,36 +69,43 @@ function scratchDir(): string {
 }
 
 /**
- * Compiles one source with `git grep -P` and the flags a search uses.
+ * Compiles one source the way a search will run it.
  *
+ * A content regex goes through `git grep -P` with the flags a search uses:
  * git compiles its patterns before reading any file, and `--no-index` with a
- * pathspec naming nothing that exists leaves it no files to read, so this
- * needs no repository of its own and does no work beyond the compile. git
- * still reads its config files, including those of a repository around the
- * directory it runs in.
+ * pathspec naming nothing that exists leaves it no files to read. A
+ * `history:` regex goes through `git diff --no-index -G` between two empty
+ * files, which compiles it as `git log -G` does and compares nothing. Neither
+ * needs a repository of its own, though git still reads its config files,
+ * including those of a repository around the directory it runs in.
  */
 async function checkRegex(
-  { source, span }: Regex,
+  regex: Regex,
   signal: AbortSignal | undefined,
 ): Promise<Result<void, QueryCompileError | PcreUnavailableError | GitError>> {
+  const { source, span, engine } = regex
   const leaf: GrepLeaf = { op: 'grep', engine: 'pcre', patterns: [source], match: 'any' }
-  const args = ['grep', '--no-index', '-q', ...grepArgs(leaf), '--', `:(literal)${randomUUID()}/`]
+  const args =
+    engine === 'history'
+      ? ['diff', '--no-index', '--quiet', `-G${source}`, '--', '/dev/null', '/dev/null']
+      : ['grep', '--no-index', '-q', ...grepArgs(leaf), '--', `:(literal)${randomUUID()}/`]
   const result = await runGit(args, { cwd: scratchDir(), allowExitCodes: [1], signal })
   if (result.isOk()) return Result.ok()
 
-  const reason = signal?.aborted ? undefined : reasonOf(result.error.stderr, source)
+  const reason = signal?.aborted ? undefined : reasonOf(result.error.stderr, regex)
   if (reason === undefined) return Result.err(toSearchRepoError(result.error))
   return Result.err(new QueryCompileError({ message: `Invalid regular expression: ${reason}`, span }))
 }
 
 /**
- * Checks that git can compile every content regex of a query.
+ * Checks that git can compile every content and `history:` regex of a query.
  *
- * {@linkcode compileQuery} validates `path:` and `symbol:` regexes, which JavaScript runs,
- * but leaves content regexes to git's PCRE. Without this check an invalid one
- * fails each repository's search separately, with git's message and no span.
- * Each distinct regex costs one short `git grep`; a query without any runs
- * nothing.
+ * {@linkcode compileQuery} validates `path:` and `symbol:` regexes, which
+ * JavaScript runs, but leaves content regexes to git's PCRE and `history:`
+ * regexes to the POSIX extended regexes of `git log -G`. Without this check
+ * an invalid one fails each repository's search separately, with git's
+ * message and no span. Each distinct regex costs one short git run; a query
+ * without any runs nothing.
  *
  * @returns Nothing when every regex compiles; a {@linkcode QueryCompileError}
  * spanning the first one that does not, in query order; a
@@ -116,7 +126,7 @@ export async function validateRegexes(
   query: QueryNode,
   options: ValidateRegexesOptions = {},
 ): Promise<Result<void, QueryCompileError | PcreUnavailableError | GitError>> {
-  const regexes = [...contentRegexes(query, new Map()).values()]
+  const regexes = [...gitRegexes(query, new Map()).values()]
   for (const result of await Promise.all(regexes.map(regex => checkRegex(regex, options.signal)))) {
     if (result.isErr()) return result
   }

@@ -7,6 +7,9 @@
 
 import type { Route } from './route.types'
 
+/** A commit id, the only refs a result links to. */
+const COMMIT = /^[0-9a-f]{40}(?:[0-9a-f]{24})?$/
+
 /** Reads a route from a query string such as `location.search`; anything unknown is the search screen. */
 export function parseRoute(search: string): Route {
   const params = new URLSearchParams(search)
@@ -17,7 +20,15 @@ export function parseRoute(search: string): Route {
   const path = params.get('path')
   if (view === 'file' && repo && path) {
     const line = Number(params.get('line'))
-    return { view, q, repo, path, ...(Number.isInteger(line) && line > 0 ? { line } : {}) }
+    const ref = params.get('ref')
+    return {
+      view,
+      q,
+      repo,
+      path,
+      ...(ref && COMMIT.test(ref) ? { ref } : {}),
+      ...(Number.isInteger(line) && line > 0 ? { line } : {}),
+    }
   }
   return { view: 'search', q }
 }
@@ -29,6 +40,7 @@ export function routeSearch(route: Route): string {
   if (route.view === 'file') {
     params.set('repo', route.repo)
     params.set('path', route.path)
+    if (route.ref !== undefined) params.set('ref', route.ref)
     if (route.line !== undefined) params.set('line', String(route.line))
   }
   if (route.q) params.set('q', route.q)

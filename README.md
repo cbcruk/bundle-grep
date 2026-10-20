@@ -53,6 +53,21 @@ branch, and a search indexes one it finds without an index; an index only
 parses the files that changed since the last one. Qualified names such as
 `symbol:Maint.deleteRows` are not supported.
 
+`ref:` searches a branch, tag or commit instead of the default branch:
+`ref:v1.0 useState`. Repositories without that ref are skipped, and results
+name the commit they were found in.
+
+`history:` searches what commits changed rather than the files as they are
+now, so it finds deleted code too: `history:useState path:src` lists, newest
+first, every commit that added or removed a line matching `useState`, with
+those lines. It runs `git log -G` from `HEAD`, or from the `ref:` given, and
+leaves out merge commits. It can be combined with `path:`, `language:`,
+`repo:`, `org:`, `user:`, `is:` and `ref:` only. A `history:` regular
+expression is a POSIX extended regular expression, so `\d` is not supported —
+write `[0-9]` — and a leading `(?-i)` makes it case-sensitive. `ref:` and
+`history:` may each appear once, and neither can be negated or used inside
+`OR`.
+
 ## Development
 
 Requires [Bun](https://bun.com) >= 1.3.12, pnpm, and git.

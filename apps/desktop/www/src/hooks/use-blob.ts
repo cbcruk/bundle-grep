@@ -10,21 +10,24 @@ import { fetchBlob } from '../api/fetch-blob'
 import { blobLines } from '../lib/blob-text'
 import type { BlobState } from './use-blob.types'
 
-/** Fetches a file at `HEAD` and splits it into lines, abandoning the request if the file changes first. */
-export function useBlob(repo: string, path: string): BlobState {
+/**
+ * Fetches a file at a commit, or at `HEAD` when `ref` is absent, and splits
+ * it into lines, abandoning the request if the file changes first.
+ */
+export function useBlob(repo: string, path: string, ref?: string): BlobState {
   const [state, setState] = useState<BlobState>({ status: 'loading' })
 
   useEffect(() => {
     const controller = new AbortController()
     setState({ status: 'loading' })
-    void fetchBlob(repo, path, controller.signal).then(result => {
+    void fetchBlob(repo, path, ref, controller.signal).then(result => {
       if (controller.signal.aborted) return
       if (!result.ok) return setState({ status: 'error', error: result.error })
       const lines = blobLines(result.value)
       setState(lines ? { status: 'text', lines } : { status: 'binary', size: result.value.byteLength })
     })
     return (): void => controller.abort()
-  }, [repo, path])
+  }, [repo, path, ref])
 
   return state
 }
