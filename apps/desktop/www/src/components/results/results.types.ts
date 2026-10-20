@@ -18,4 +18,6 @@ export interface ResultsProps {
   maxLimit: number
   /** Searches again with {@linkcode ResultsProps.maxLimit}. */
   onShowMore: () => void
+  /** The languages `symbol:` covers, named when a `symbol:` query finds nothing. */
+  symbolLanguages: readonly string[]
 }

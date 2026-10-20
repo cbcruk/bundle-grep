@@ -216,4 +216,6 @@ export interface Bridge {
   bundleGrepSettings: () => Promise<BridgeResult<Settings>>
   /** Lists the names `language:` accepts, popular ones first. */
   bundleGrepLanguages: () => Promise<BridgeResult<string[]>>
+  /** Lists the languages `symbol:` finds definitions in. */
+  bundleGrepSymbolLanguages: () => Promise<BridgeResult<string[]>>
 }

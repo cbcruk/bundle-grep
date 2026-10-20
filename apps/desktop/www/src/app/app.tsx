@@ -6,7 +6,7 @@ import { Link } from '../components/link/link'
 import { Results } from '../components/results/results'
 import { ReposView } from '../components/repos-view/repos-view'
 import { SearchBox } from '../components/search-box/search-box'
-import { useArchive, useLanguages } from '../hooks/use-archive'
+import { useArchive, useLanguages, useSymbolLanguages } from '../hooks/use-archive'
 import { navigate, useRoute } from '../hooks/use-route'
 import { useSearch } from '../hooks/use-search'
 import { isTyping } from '../lib/keyboard'
@@ -29,6 +29,7 @@ export function App(): React.JSX.Element {
   const route = useRoute()
   const { repos, reload } = useArchive()
   const languages = useLanguages()
+  const symbolLanguages = useSymbolLanguages()
   const [expanded, setExpanded] = useState<string>()
   const limit = expanded === route.q ? MAX_LIMIT : LIMIT
   const search = useSearch(route.q, limit)
@@ -81,6 +82,7 @@ export function App(): React.JSX.Element {
                 limit={limit}
                 maxLimit={MAX_LIMIT}
                 onShowMore={() => setExpanded(route.q)}
+                symbolLanguages={symbolLanguages}
               />
             </div>
           ))}
@@ -95,7 +97,8 @@ function Start(): React.JSX.Element {
       <h1>Search your archive</h1>
       <p>
         Queries follow GitHub code search: <code>useState language:typescript</code>, <code>repo:owner/name</code>,{' '}
-        <code>path:/src/**</code>, <code>/regex/</code>, <code>"exact phrase"</code>, <code>NOT</code>, <code>OR</code>.
+        <code>path:/src/**</code>, <code>symbol:useState</code>, <code>/regex/</code>, <code>"exact phrase"</code>,{' '}
+        <code>NOT</code>, <code>OR</code>.
       </p>
       <p>
         Press <kbd>/</kbd> to search, <kbd>j</kbd>/<kbd>k</kbd> to move between results, <kbd>Enter</kbd> to open one,

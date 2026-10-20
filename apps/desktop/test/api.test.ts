@@ -102,6 +102,19 @@ describe('/api/search', () => {
     expect(events.at(-1)).toMatchObject({ type: 'done', totalFiles: 1, truncated: false })
   })
 
+  test('symbol: streams definitions with the name highlighted', async () => {
+    const events = await lines(await call('/api/search?q=symbol:n'))
+    expect(events.filter(event => event.type === 'file')).toEqual([
+      {
+        type: 'file',
+        repo: 'me/app',
+        path: 'src/counter.ts',
+        language: 'TypeScript',
+        lines: [{ number: 3, text: 'export const n = useState(0)', context: false, column: 13, ranges: [{ start: 13, end: 14 }] }],
+      },
+    ])
+  })
+
   test('limit and context are passed on', async () => {
     const limited = await lines(await call('/api/search?q=e&limit=1'))
     expect(limited.filter(event => event.type === 'file')).toHaveLength(1)

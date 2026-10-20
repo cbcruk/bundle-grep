@@ -136,6 +136,20 @@ describe('bundle-grep', () => {
     expect(await cli('search', 'nothing-here-at-all')).toEqual({ code: 1, stdout: '', stderr: '0 files in 0 repositories\n' })
   })
 
+  test('search finds definitions with symbol:, and names the languages it covers when nothing matched', async () => {
+    expect(await cli('search', 'symbol:n repo:acme/app')).toEqual({
+      code: 0,
+      stdout: 'acme/app\nsrc/counter.ts:3:14:export const n = useState(0)\n',
+      stderr: '1 file in 1 repository\n',
+    })
+    expect(await cli('search', 'symbol:useState')).toEqual({
+      code: 1,
+      stdout: '',
+      stderr:
+        '0 files in 0 repositories\nsymbol: finds definitions in C, C#, C++, Go, Java, JavaScript, Python, Ruby, Rust, TSX, TypeScript files only\n',
+    })
+  })
+
   test('search prints a path-only match as just the path', async () => {
     expect((await cli('search', 'path:README repo:acme/app')).stdout).toBe('acme/app\nREADME.md\n')
   })
