@@ -247,7 +247,7 @@ export async function* search<Repo extends SearchRepo>(
 
     const shown = counted.slice(0, Math.max(0, limit - reserved))
     reserved += shown.length
-    const described = await describeCommits({ gitDir: repo.gitDir, commits: shown, history, maxMatchesPerFile, signal: stop })
+    const described = await describeCommits({ gitDir: repo.gitDir, commits: shown, history, expr, maxMatchesPerFile, signal: stop })
     if (stop.aborted) return
     if (described.isErr()) {
       historyFound -= mine

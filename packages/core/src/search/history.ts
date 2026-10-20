@@ -48,8 +48,10 @@ function logArgs(history: HistoryPattern): string[] {
  * `max` commits were kept, or `enough` is aborted, rather than left to walk
  * the whole history. A commit counts once its output so far ends between
  * two names, rather than when the next commit begins, as git flushes after
- * each commit. Since a long list of names can still arrive in pieces, git is
- * only stopped once a commit counted early has been read to its end.
+ * each commit and the next one may be far down the history. A long list of
+ * names can still arrive in pieces, so when git is stopped early the last
+ * commit may list only some of its files; {@linkcode describeCommits} reads
+ * them from the patch instead.
  *
  * @returns The commits and whether that was all of them, or the
  * {@linkcode GitError} of running git.
@@ -59,14 +61,8 @@ export async function matchingCommits(options: MatchingCommitsOptions): Promise<
   const commits: LoggedCommit[] = []
   const full = new AbortController()
   const enough = options.enough ? AbortSignal.any([full.signal, options.enough]) : full.signal
-  const kill = new AbortController()
   const kept = new Map<string, LoggedCommit>()
-  let reading: string | undefined
-  const stopWhenClosed = (): void => {
-    if (enough.aborted && reading === undefined) kill.abort()
-  }
-  enough.addEventListener('abort', stopWhenClosed)
-  const consider = (commit: LoggedCommit, closed: boolean): void => {
+  const consider = (commit: LoggedCommit): void => {
     const files = commit.files.filter(path => matchesPath(expr, path))
     const known = kept.get(commit.sha)
     if (known) {
@@ -75,29 +71,25 @@ export async function matchingCommits(options: MatchingCommitsOptions): Promise<
       const keep = { sha: commit.sha, files }
       kept.set(commit.sha, keep)
       commits.push(keep)
-      if (!closed) reading = commit.sha
       onCommit?.(keep)
     }
-    if (closed && reading === commit.sha) reading = undefined
     if (commits.length >= max) full.abort()
-    stopWhenClosed()
   }
-  const parser = createNameLogParser(commit => consider(commit, true))
+  const parser = createNameLogParser(consider)
   const decoder = new TextDecoder()
   const args = [...logArgs(history), '--format=%x1e%H', '--name-only', '-z', ref, '--', ...narrowingPathspecs(expr)]
   const result = await runGit(args, {
     cwd: gitDir,
-    signal: AbortSignal.any([signal, kill.signal]),
+    signal: AbortSignal.any([signal, enough]),
     onStdout: chunk => {
-      if (kill.signal.aborted) return
+      if (enough.aborted) return
       parser.push(decoder.decode(chunk, { stream: true }))
       const open = parser.open()
-      if (open) consider(open, false)
+      if (open) consider(open)
     },
   })
-  enough.removeEventListener('abort', stopWhenClosed)
   const stopped = result.isOk() || result.error.exitCode === null
-  if (kill.signal.aborted && !signal.aborted && stopped) return Result.ok({ commits, complete: false })
+  if (enough.aborted && !signal.aborted && stopped) return Result.ok({ commits, complete: false })
   if (result.isErr()) return result
   parser.push(decoder.decode())
   parser.end()
@@ -107,7 +99,10 @@ export async function matchingCommits(options: MatchingCommitsOptions): Promise<
 /**
  * Reads the patches of some commits and keeps the changed lines that match.
  *
- * The commits are passed on stdin, so any number fit. Lines are matched
+ * The commits are passed on stdin, so any number fit. With `-G`, git's
+ * patch holds only the files whose changes match, and of those the ones
+ * `expr` keeps are shown, so a file list cut short by an early stop does not
+ * matter here. Lines are matched
  * again in JavaScript to highlight them; a file where JavaScript reads the
  * pattern differently from git and finds nothing shows its changed lines
  * unhighlighted instead. At most `maxMatchesPerFile` lines are kept per file.
@@ -116,7 +111,7 @@ export async function matchingCommits(options: MatchingCommitsOptions): Promise<
  * running git.
  */
 export async function describeCommits(options: DescribeCommitsOptions): Promise<Result<DescribedCommit[], GitError>> {
-  const { gitDir, commits, history, maxMatchesPerFile, signal } = options
+  const { gitDir, commits, history, expr, maxMatchesPerFile, signal } = options
   if (commits.length === 0) return Result.ok([])
   const args = [
     ...logArgs(history),
@@ -132,13 +127,12 @@ export async function describeCommits(options: DescribeCommitsOptions): Promise<
   const result = await runGit(args, { cwd: gitDir, input: commits.map(commit => `${commit.sha}\n`).join(''), signal })
   if (result.isErr()) return result
 
-  const kept = new Map(commits.map(commit => [commit.sha, new Set(commit.files)]))
   const highlight = createHighlighter([history.pattern])
   return Result.ok(
     parsePatchLog(result.value.stdout.toString('utf8')).map(({ fields: [sha, parents, date, author, subject], files }) => ({
       commit: { sha, parent: parents.split(' ')[0] || null, date, author, subject },
       files: files
-        .filter(file => kept.get(sha)?.has(file.path))
+        .filter(file => matchesPath(expr, file.path))
         .map(file => {
           const highlighted = file.lines.map((line): ChangedLine => ({ ...line, ranges: highlight(line.text) }))
           const matched = highlighted.filter(line => line.ranges.length > 0)
