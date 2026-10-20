@@ -8,6 +8,7 @@ import type { FileSystemError, InvalidRepoNameError } from '../archive/archive.e
 import type { ArchiveLayout, ArchivePaths, RepoMetadata } from '../archive/archive.types'
 import type { GitError } from '../git/git.errors'
 import type { GhError } from '../github/github.errors'
+import type { SymbolParserError } from '../symbols/symbols.errors'
 import type { GithubOptions } from '../github/github.types'
 
 /**
@@ -71,7 +72,7 @@ export interface SyncOutcome {
 }
 
 /** The ways syncing one repository can fail. */
-export type SyncError = GitError | FileSystemError | InvalidRepoNameError
+export type SyncError = GitError | FileSystemError | InvalidRepoNameError | SymbolParserError
 
 /** One step of {@linkcode syncRepos}: a repository that synced, or one that failed. */
 export type SyncEvent =

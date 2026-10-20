@@ -6,12 +6,14 @@
 
 import { Result } from 'better-result'
 
-import type { GitError } from '../git/git.errors'
 import { runGit, splitNul } from '../git/run-git'
+import { symbolMatcher } from '../symbols/match-symbols'
+import { symbolIndex } from '../symbols/symbol-index'
+import type { SymbolIndex, SymbolIndexError } from '../symbols/symbols.types'
 import { grepArgs } from './grep-args'
 import type { FileExpr, LanguageLeaf, ListMatchingFilesOptions } from './plan.types'
 
-type FileSet = Result<Set<string>, GitError>
+type FileSet = Result<Set<string>, SymbolIndexError>
 
 function escapeGlob(text: string): string {
   return text.replace(/[*?[\]\\]/g, '\\$&')
@@ -82,14 +84,17 @@ async function listTextFiles(gitDir: string, ref: string, signal: AbortSignal | 
  * Lists the text files in a tree that an expression selects.
  *
  * Builds the tree's text-file list once and runs one `git grep -l` per `grep`
- * leaf, then combines the sets in memory.
+ * leaf, then combines the sets in memory. `symbol:` leaves are answered from
+ * the tree's symbol index, loaded once.
  *
- * @returns The matching paths, sorted, or the first git failure.
+ * @returns The matching paths, sorted, or the first failure: git's, or
+ * tree-sitter's while building a symbol index.
  */
-export async function listMatchingFiles(options: ListMatchingFilesOptions): Promise<Result<string[], GitError>> {
+export async function listMatchingFiles(options: ListMatchingFilesOptions): Promise<Result<string[], SymbolIndexError>> {
   const { gitDir, expr, ref = 'HEAD', signal } = options
   const pathspecs = narrowingPathspecs(expr)
   let universe: Promise<FileSet> | undefined
+  let symbols: Promise<Result<SymbolIndex, SymbolIndexError>> | undefined
 
   const allFiles = (): Promise<FileSet> => {
     universe ??= listTextFiles(gitDir, ref, signal)
@@ -111,6 +116,13 @@ export async function listMatchingFiles(options: ListMatchingFilesOptions): Prom
       }
       case 'language':
         return filterAll(path => matchesLanguage(node, path))
+      case 'symbol': {
+        symbols ??= options.symbols ? Promise.resolve(Result.ok(options.symbols)) : symbolIndex(gitDir, { ref, signal })
+        const matches = symbolMatcher([node])
+        return (await symbols).map(
+          index => new Set([...index.files].filter(([, file]) => file.symbols.some(matches)).map(([path]) => path)),
+        )
+      }
       case 'grep': {
         const args = ['grep', '--no-color', '-l', '-z', '-I', ...grepArgs(node), ref, '--', ...pathspecs]
         const result = await runGit(args, { cwd: gitDir, allowExitCodes: [1], signal })

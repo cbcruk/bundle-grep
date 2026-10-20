@@ -10,7 +10,7 @@ import type { MatchNode, Pattern, QueryNode } from '../query/query.types'
 import { findLanguage } from './languages'
 import { escapeRegex, globToRegex } from './path-regex'
 import { QueryCompileError } from './plan.errors'
-import type { GrepLeaf, PathLeaf, QueryExpr, SearchPlan } from './plan.types'
+import type { GrepLeaf, PathLeaf, QueryExpr, SearchPlan, SymbolLeaf } from './plan.types'
 import { simplify } from './simplify'
 
 type Compiled = Result<QueryExpr, QueryCompileError>
@@ -29,16 +29,29 @@ function isValidRegex(source: string, ignoreCase: boolean): Result<void, string>
 }
 
 /**
- * Builds a path leaf from a regex source, honouring a leading `(?-i)`.
+ * Builds a regex leaf for JavaScript to run from a query's source, honouring
+ * a leading `(?-i)`.
  *
  * JavaScript has no inline `(?-i)`, so it is taken off and becomes the flag.
  *
  * @returns The leaf, or the reason JavaScript cannot compile the source.
  */
-function pathRegexLeaf(source: string): Result<PathLeaf, string> {
+function regexLeaf<Op extends 'path' | 'symbol'>(op: Op, source: string): Result<{ op: Op; regex: string; ignoreCase: boolean }, string> {
   const caseSensitive = source.startsWith('(?-i)')
   const regex = caseSensitive ? source.slice('(?-i)'.length) : source
-  return isValidRegex(regex, !caseSensitive).map(() => ({ op: 'path', regex, ignoreCase: !caseSensitive }))
+  return isValidRegex(regex, !caseSensitive).map(() => ({ op, regex, ignoreCase: !caseSensitive }))
+}
+
+function invalidRegex(node: MatchNode, reason: string): QueryCompileError {
+  const message = reason.replace(/^Invalid regular expression: (\/.*\/[a-z]*: )?/, '')
+  return new QueryCompileError({ message: `Invalid regular expression for ${node.field}: ${message}`, span: node.span })
+}
+
+/** Builds the leaf for a `symbol:` qualifier: a literal names a definition exactly, ignoring case. */
+function symbolLeaf(node: MatchNode): Result<SymbolLeaf, QueryCompileError> {
+  const { pattern } = node
+  if (pattern.kind === 'literal') return Result.ok({ op: 'symbol', regex: `^${escapeRegex(pattern.value)}$`, ignoreCase: true })
+  return regexLeaf('symbol', pattern.source).mapError(reason => invalidRegex(node, reason))
 }
 
 /**
@@ -52,25 +65,20 @@ function compileMatch(node: MatchNode): Compiled {
 
   if (field === 'content') return Result.ok(contentLeaf(pattern))
 
+  if (field === 'symbol') return symbolLeaf(node)
+
   if (field === 'path') {
     if (pattern.kind === 'literal') {
       const regex = pattern.quoted ? escapeRegex(pattern.value) : globToRegex(pattern.value)
       return Result.ok({ op: 'path', regex, ignoreCase: true })
     }
-    const leaf = pathRegexLeaf(pattern.source)
-    if (leaf.isErr()) {
-      const reason = leaf.error.replace(/^Invalid regular expression: (\/.*\/[a-z]*: )?/, '')
-      return Result.err(
-        new QueryCompileError({ message: `Invalid regular expression for path: ${reason}`, span: node.span }),
-      )
-    }
-    return Result.ok(leaf.value)
+    return regexLeaf('path', pattern.source).mapError(reason => invalidRegex(node, reason))
   }
 
   const path: PathLeaf | undefined =
     pattern.kind === 'literal'
       ? { op: 'path', regex: escapeRegex(pattern.value), ignoreCase: true }
-      : pathRegexLeaf(pattern.source).unwrapOr(undefined)
+      : regexLeaf('path', pattern.source).unwrapOr(undefined)
   return Result.ok(path ? { op: 'or', children: [contentLeaf(pattern), path] } : contentLeaf(pattern))
 }
 
@@ -113,14 +121,25 @@ function patternKey(pattern: Pattern): string {
   return pattern.kind === 'literal' ? `literal:${pattern.value}` : `regex:${pattern.source}`
 }
 
-/** Collects the content patterns under an even number of negations, in query order. */
-function collectHighlight(node: QueryNode, positive: boolean, into: Map<string, Pattern>): void {
+interface Highlights {
+  patterns: Map<string, Pattern>
+  symbols: Map<string, SymbolLeaf>
+}
+
+/** Collects the content patterns and `symbol:` leaves under an even number of negations, in query order. */
+function collectHighlight(node: QueryNode, positive: boolean, into: Highlights): void {
   switch (node.type) {
-    case 'match':
-      if (positive && node.field !== 'path' && !into.has(patternKey(node.pattern))) {
-        into.set(patternKey(node.pattern), node.pattern)
+    case 'match': {
+      if (!positive || node.field === 'path') return
+      if (node.field === 'symbol') {
+        const leaf = symbolLeaf(node).unwrapOr(undefined)
+        const key = leaf && `${leaf.ignoreCase ? 'i' : ''}:${leaf.regex}`
+        if (leaf && key && !into.symbols.has(key)) into.symbols.set(key, leaf)
+        return
       }
+      if (!into.patterns.has(patternKey(node.pattern))) into.patterns.set(patternKey(node.pattern), node.pattern)
       return
+    }
     case 'filter':
       return
     case 'not':
@@ -137,11 +156,12 @@ function collectHighlight(node: QueryNode, positive: boolean, into: Map<string, 
  *
  * Content patterns become `git grep` leaves, matched case-insensitively as on
  * GitHub; `path:` values become path regexes following GitHub's glob rules;
- * `language:` resolves through Linguist; and repository qualifiers are left
- * for {@linkcode specializePlan}.
+ * `symbol:` values match definition names, a literal exactly and ignoring
+ * case; `language:` resolves through Linguist; and repository qualifiers are
+ * left for {@linkcode specializePlan}.
  *
  * @returns The plan, or a {@linkcode QueryCompileError} for an unknown
- * language or a `path:` regex JavaScript cannot compile.
+ * language or a `path:` or `symbol:` regex JavaScript cannot compile.
  *
  * @example Compiling a query
  * ```ts
@@ -154,8 +174,8 @@ function collectHighlight(node: QueryNode, positive: boolean, into: Map<string, 
  */
 export function compileQuery(query: QueryNode): Result<SearchPlan, QueryCompileError> {
   return compileNode(query).map(expr => {
-    const highlight = new Map<string, Pattern>()
-    collectHighlight(query, true, highlight)
-    return { expr: simplify(expr), highlight: [...highlight.values()] }
+    const highlights: Highlights = { patterns: new Map(), symbols: new Map() }
+    collectHighlight(query, true, highlights)
+    return { expr: simplify(expr), highlight: [...highlights.patterns.values()], symbols: [...highlights.symbols.values()] }
   })
 }

@@ -91,6 +91,12 @@ describe('qualifiers', () => {
     expect(tree('content:README')).toEqual({ match: 'content', kind: 'literal', value: 'README', quoted: false })
   })
 
+  test('symbol: matches definition names, as a literal or a regex', () => {
+    expect(tree('symbol:useState')).toEqual({ match: 'symbol', kind: 'literal', value: 'useState', quoted: false })
+    expect(tree('symbol:/^use/')).toEqual({ match: 'symbol', kind: 'regex', source: '^use' })
+    expect(tree('-symbol:x')).toEqual({ not: { match: 'symbol', kind: 'literal', value: 'x', quoted: false } })
+  })
+
   test('path: matches only paths', () => {
     expect(tree('path:src/*.ts')).toEqual(pathLiteral('src/*.ts'))
   })
@@ -300,7 +306,7 @@ describe('errors', () => {
   })
 
   test('a GitHub qualifier that is not supported', () => {
-    expect(error('-symbol:foo')).toEqual({ message: 'Qualifier symbol: is not supported', offset: 1, length: 7 })
+    expect(error('-enterprise:foo')).toEqual({ message: 'Qualifier enterprise: is not supported', offset: 1, length: 11 })
   })
 
   test('an unclosed group', () => {

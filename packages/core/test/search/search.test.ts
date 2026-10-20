@@ -1,5 +1,5 @@
 import { afterAll, beforeAll, describe, expect, test } from 'bun:test'
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs'
+import { existsSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 
@@ -243,6 +243,52 @@ describe('search edge cases', () => {
     } finally {
       rmSync(root, { recursive: true, force: true })
     }
+  })
+})
+
+describe('symbol:', () => {
+  function shown(events: SearchEvent[]): Record<string, unknown[]> {
+    return Object.fromEntries(
+      events.flatMap(event =>
+        event.type === 'file'
+          ? [[`${event.repo}/${event.path}`, event.lines.map(line => [line.number, line.context, line.column, line.ranges])]]
+          : [],
+      ),
+    )
+  }
+
+  test('finds definitions rather than mentions, with the name highlighted', async () => {
+    expect(shown(await collect('symbol:usecounter'))).toEqual({ 'me/app/src/counter.ts': [[3, false, 16, [{ start: 16, end: 26 }]]] })
+    expect(shown(await collect('symbol:useState'))).toEqual({ 'me/lib/index.js': [[1, false, 6, [{ start: 6, end: 14 }]]] })
+  })
+
+  test('a regex matches part of a name', async () => {
+    expect(files(await collect('symbol:/^use/'))).toEqual(['me/app/src/counter.ts', 'me/lib/index.js'])
+    expect(files(await collect('symbol:/(?-i)^UseState/'))).toEqual([])
+  })
+
+  test('definition lines merge with content matches, and context surrounds them', async () => {
+    expect(shown(await collect('symbol:useCounter useState'))).toEqual({
+      'me/app/src/counter.ts': [
+        [1, false, 9, [{ start: 9, end: 17 }]],
+        [3, false, 16, [{ start: 16, end: 26 }]],
+        [4, false, 14, [{ start: 14, end: 22 }]],
+      ],
+    })
+    expect(shown(await collect('symbol:useCounter useCounter'))['me/app/src/counter.ts']).toEqual([[3, false, 16, [{ start: 16, end: 26 }]]])
+    expect(shown(await collect('symbol:useCounter', { context: 1 }))['me/app/src/counter.ts']).toEqual([
+      [2, true, undefined, []],
+      [3, false, 16, [{ start: 16, end: 26 }]],
+      [4, true, undefined, []],
+    ])
+  })
+
+  test('negated, it keeps the files that define no such symbol', async () => {
+    expect(files(await collect('useState -symbol:useState'))).toEqual(['me/app/README.md', 'me/app/src/counter.ts', 'me/app/src/useState.md'])
+  })
+
+  test('the index is built on first use and kept in the repository', async () => {
+    expect(existsSync(join(repos[0]!.gitDir, 'bundle-grep-symbols.json'))).toBe(true)
   })
 })
 

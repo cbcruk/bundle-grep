@@ -12,6 +12,7 @@
  */
 
 import type { FilterKey, Pattern } from '../query/query.types'
+import type { SymbolIndex } from '../symbols/symbols.types'
 
 /** Every file in the tree. */
 export interface AllLeaf {
@@ -63,6 +64,16 @@ export interface LanguageLeaf {
   filenames: string[]
 }
 
+/** The files that define a symbol whose name matches a regular expression, from `symbol:`. */
+export interface SymbolLeaf {
+  /** Discriminant. */
+  op: 'symbol'
+  /** A JavaScript regular expression source, tested against each definition's name. */
+  regex: string
+  /** `false` only when the query opted out with a leading `(?-i)`. */
+  ignoreCase: boolean
+}
+
 /** A repository qualifier, which holds for every file of a repository or for none. */
 export interface FilterLeaf {
   /** Discriminant. */
@@ -74,7 +85,7 @@ export interface FilterLeaf {
 }
 
 /** A leaf that selects files within a repository. */
-export type FileLeaf = AllLeaf | NoneLeaf | GrepLeaf | PathLeaf | LanguageLeaf
+export type FileLeaf = AllLeaf | NoneLeaf | GrepLeaf | PathLeaf | LanguageLeaf | SymbolLeaf
 
 /** A boolean expression over `Leaf`s. */
 export type Expr<Leaf> =
@@ -107,6 +118,8 @@ export interface SearchPlan {
    * towards a file matching rather than against it.
    */
   highlight: Pattern[]
+  /** The `symbol:` leaves whose definitions are worth showing, counted the same way. */
+  symbols: SymbolLeaf[]
 }
 
 /** What `language:` needs to know about one Linguist language. */
@@ -127,6 +140,11 @@ export interface ListMatchingFilesOptions {
   expr: FileExpr
   /** The tree to search. Defaults to `HEAD`. */
   ref?: string
+  /**
+   * The tree's symbol index, for `symbol:` leaves; one is loaded with
+   * {@linkcode symbolIndex} when the expression needs it and none is given.
+   */
+  symbols?: SymbolIndex
   /** Stops the search, killing any git still running. */
   signal?: AbortSignal
 }

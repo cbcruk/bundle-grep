@@ -5,8 +5,10 @@
  */
 
 import type { GitError } from '../git/git.errors'
-import type { FilterLeaf, SearchPlan } from '../plan/plan.types'
+import type { FilterLeaf, SearchPlan, SymbolLeaf } from '../plan/plan.types'
 import type { Pattern } from '../query/query.types'
+import type { SymbolParserError } from '../symbols/symbols.errors'
+import type { SymbolIndex } from '../symbols/symbols.types'
 import type { PcreUnavailableError } from './search.errors'
 
 /** A repository to search. */
@@ -48,8 +50,9 @@ export interface SearchLine {
   /** `true` for a line shown only as context around a match. */
   context: boolean
   /**
-   * Where git reported the line's first match, as a UTF-16 index; `undefined`
-   * for context lines.
+   * Where the line's first match starts, as a UTF-16 index: the column git
+   * reported, or where a matching definition's name starts. `undefined` for
+   * context lines.
    */
   column?: number
   /**
@@ -71,7 +74,7 @@ export interface SearchFacets {
 }
 
 /** Why a repository could not be searched. */
-export type SearchRepoError = GitError | PcreUnavailableError
+export type SearchRepoError = GitError | PcreUnavailableError | SymbolParserError
 
 /** Something that happened during a search, in the order it happened. */
 export type SearchEvent =
@@ -129,6 +132,24 @@ export interface LineOptions {
   signal: AbortSignal
 }
 
+/** What {@linkcode collectSymbolLines} needs to show the definitions a query matched. */
+export interface SymbolLineOptions {
+  /** The repository. */
+  repo: SearchRepo
+  /** The symbol index of the tree being searched. */
+  index: SymbolIndex
+  /** The matching files to show definitions from. */
+  files: readonly string[]
+  /** The symbol leaves, from {@linkcode SearchPlan.symbols}. */
+  leaves: readonly SymbolLeaf[]
+  /** Context lines around each definition. */
+  context: number
+  /** Most definitions shown per file. */
+  maxMatchesPerFile: number
+  /** Kills git when aborted. */
+  signal: AbortSignal
+}
+
 /**
  * Options for {@linkcode search}.
  *
@@ -148,7 +169,10 @@ export interface SearchOptions<Repo extends SearchRepo = SearchRepo> {
   limit?: number
   /** Context lines around each match, as git's `-C`. Defaults to `0`. */
   context?: number
-  /** Most matching lines per file and pattern engine (`-F` or `-P`). Defaults to `20`. */
+  /**
+   * Most matching lines per file and pattern engine (`-F` or `-P`), and most
+   * definitions per file for `symbol:`. Defaults to `20`.
+   */
   maxMatchesPerFile?: number
   /** Repositories searched at once, at least `1`. Defaults to `4`. */
   concurrency?: number

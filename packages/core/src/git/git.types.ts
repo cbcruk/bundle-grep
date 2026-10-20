@@ -19,6 +19,10 @@ export interface RunGitOptions {
   env?: Record<string, string | undefined>
   /** Kills git when aborted; the run then fails with a {@linkcode GitError}. */
   signal?: AbortSignal
+  /** Written to git's stdin, which is then closed. */
+  input?: string
+  /** Receives stdout as it arrives, instead of collecting it into {@linkcode GitOutput.stdout}. */
+  onStdout?: (chunk: Buffer) => void
 }
 
 /** What a successful git run produced. */

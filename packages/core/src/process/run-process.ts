@@ -33,7 +33,7 @@ export function runProcess(
       spawn(command, args, {
         cwd: options.cwd,
         env: options.env ? withEnv(options.env) : process.env,
-        stdio: ['ignore', 'pipe', 'pipe'],
+        stdio: ['pipe', 'pipe', 'pipe'],
         signal: options.signal,
       }),
     )
@@ -46,7 +46,10 @@ export function runProcess(
     const child = spawned.value
     const stdout: Buffer[] = []
     const stderr: Buffer[] = []
-    child.stdout.on('data', (chunk: Buffer) => stdout.push(chunk))
+    child.stdout.on('data', options.onStdout ?? ((chunk: Buffer): number => stdout.push(chunk)))
+    // A process that exits without reading all of its input makes the write fail with EPIPE.
+    child.stdin.on('error', () => undefined)
+    child.stdin.end(options.input)
     child.stderr.on('data', (chunk: Buffer) => stderr.push(chunk))
 
     child.on('error', cause => {

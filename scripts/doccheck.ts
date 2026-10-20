@@ -93,7 +93,7 @@ try {
           barlo: [join(ROOT, 'apps/desktop/node_modules/barlo')],
         },
       },
-      files,
+      files: [...files, join(ROOT, 'packages/core/src/assets.d.ts')],
     }),
   )
 
