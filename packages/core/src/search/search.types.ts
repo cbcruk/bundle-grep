@@ -63,6 +63,42 @@ export interface SearchLine {
   ranges: MatchRange[]
 }
 
+/** One line a commit added or removed, as `history:` shows it. */
+export interface ChangedLine {
+  /** Whether the commit added the line or removed it. */
+  change: 'added' | 'removed'
+  /** The 1-based line number: in the commit's version of the file when added, its parent's when removed. */
+  number: number
+  /** The line's text, without its line terminator. */
+  text: string
+  /** Where the `history:` pattern matches; empty when JavaScript cannot run the pattern. */
+  ranges: MatchRange[]
+}
+
+/** One file a commit changed, as `history:` shows it. */
+export interface ChangedFile {
+  /** The path relative to the repository root, after the commit; before it, for a deleted file. */
+  path: string
+  /** What {@linkcode languageOf} says, if anything. */
+  language?: string
+  /** Changed lines the pattern matches, in diff order. */
+  lines: ChangedLine[]
+}
+
+/** A commit `history:` found, with what it says about itself. */
+export interface CommitInfo {
+  /** The full commit id. */
+  sha: string
+  /** The first parent's id, or `null` for a root commit. */
+  parent: string | null
+  /** When it was authored, as ISO 8601. */
+  date: string
+  /** The author's name. */
+  author: string
+  /** The first line of the message. */
+  subject: string
+}
+
 /** The file-level grouping of results, as GitHub's sidebar shows it. */
 export interface SearchFacets {
   /** Matching files per language name; files of no known language are left out. */
@@ -92,6 +128,18 @@ export type SearchEvent =
        * on its path alone.
        */
       lines: SearchLine[]
+      /** The commit searched, when the query named a `ref:`; `HEAD` otherwise. */
+      commit?: string
+    }
+  | {
+      /** A commit whose changes match `history:`, newest first within a repository. */
+      type: 'commit'
+      /** The repository's {@linkcode SearchRepo.name}. */
+      repo: string
+      /** The commit. */
+      commit: CommitInfo
+      /** The files whose changes match, with the matching lines. */
+      files: ChangedFile[]
     }
   | {
       /** A repository that failed; the others carry on. */
@@ -104,11 +152,20 @@ export type SearchEvent =
   | {
       /** The search is over. Always the last event. */
       type: 'done'
-      /** How many files matched across every repository searched, beyond any limit. */
+      /**
+       * How many files matched across every repository searched, beyond any
+       * limit. For `history:`, how many changed files matched, counting a
+       * file once per commit.
+       */
       totalFiles: number
-      /** Grouped counts over the same files as `totalFiles`. */
+      /** For `history:`, how many commits matched, beyond any limit. */
+      totalCommits?: number
+      /**
+       * Grouped counts over the same files as `totalFiles`. For `history:`,
+       * repositories count commits.
+       */
       facets: SearchFacets
-      /** `true` when `file` events stopped at {@linkcode SearchOptions.limit}. */
+      /** `true` when `file` or `commit` events stopped at {@linkcode SearchOptions.limit}. */
       truncated: boolean
       /** Why the search stopped early, if it did; results so far are still valid. */
       stopped?: 'aborted' | 'timeout'
@@ -165,7 +222,7 @@ export interface SearchOptions<Repo extends SearchRepo = SearchRepo> {
    * for a repository; {@linkcode repoHolds} decides them for archived ones.
    */
   holds: (repo: Repo, filter: FilterLeaf) => boolean
-  /** Most `file` events to emit. Defaults to `100`. */
+  /** Most `file` events to emit, or `commit` events for `history:`. Defaults to `100`. */
   limit?: number
   /** Context lines around each match, as git's `-C`. Defaults to `0`. */
   context?: number

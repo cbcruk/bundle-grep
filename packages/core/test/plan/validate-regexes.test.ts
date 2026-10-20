@@ -51,6 +51,13 @@ describe('validateRegexes', () => {
     expect(await check('/[/ OR (x /[/)')).toMatchObject({ offset: 0, length: 3 })
   })
 
+  test('history: regexes are checked as git log -G reads them', async () => {
+    expect(await check('history:/foo[0-9]+/ path:src')).toBe('ok')
+    expect(await check('history:/(?-i)Foo/')).toBe('ok')
+    expect(await check('history:/a[/')).toMatchObject({ offset: 0, length: 12 })
+    expect(await check('history:/a[/')).toHaveProperty('message', expect.stringMatching(/^Invalid regular expression: ./))
+  })
+
   test('path: regexes are left to compileQuery', async () => {
     expect(await check('path:/a[]/')).toBe('ok')
     expect(await check('/a[]/')).toMatchObject({ offset: 0, length: 5 })

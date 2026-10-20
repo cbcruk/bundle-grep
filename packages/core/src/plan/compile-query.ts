@@ -12,6 +12,7 @@ import { escapeRegex, globToRegex } from './path-regex'
 import { QueryCompileError } from './plan.errors'
 import type { GrepLeaf, PathLeaf, QueryExpr, SearchPlan, SymbolLeaf } from './plan.types'
 import { simplify } from './simplify'
+import { splitQuery } from './split-query'
 
 type Compiled = Result<QueryExpr, QueryCompileError>
 
@@ -67,6 +68,10 @@ function compileMatch(node: MatchNode): Compiled {
 
   if (field === 'symbol') return symbolLeaf(node)
 
+  if (field === 'history') {
+    return Result.err(new QueryCompileError({ message: 'history: cannot be negated or combined with OR', span: node.span }))
+  }
+
   if (field === 'path') {
     if (pattern.kind === 'literal') {
       const regex = pattern.quoted ? escapeRegex(pattern.value) : globToRegex(pattern.value)
@@ -88,6 +93,9 @@ function compileNode(node: QueryNode): Compiled {
       return compileMatch(node)
 
     case 'filter': {
+      if (node.key === 'ref') {
+        return Result.err(new QueryCompileError({ message: 'ref: cannot be negated or combined with OR', span: node.span }))
+      }
       if (node.key !== 'language') return Result.ok({ op: 'filter', key: node.key, value: node.value })
       const language = findLanguage(node.value)
       if (!language) {
@@ -158,10 +166,12 @@ function collectHighlight(node: QueryNode, positive: boolean, into: Highlights):
  * GitHub; `path:` values become path regexes following GitHub's glob rules;
  * `symbol:` values match definition names, a literal exactly and ignoring
  * case; `language:` resolves through Linguist; and repository qualifiers are
- * left for {@linkcode specializePlan}.
+ * left for {@linkcode specializePlan}. A top-level `ref:` and `history:` are
+ * taken out by {@linkcode splitQuery}.
  *
  * @returns The plan, or a {@linkcode QueryCompileError} for an unknown
- * language or a `path:` or `symbol:` regex JavaScript cannot compile.
+ * language, a `path:` or `symbol:` regex JavaScript cannot compile, or a
+ * misplaced `ref:` or `history:`.
  *
  * @example Compiling a query
  * ```ts
@@ -173,9 +183,18 @@ function collectHighlight(node: QueryNode, positive: boolean, into: Highlights):
  * ```
  */
 export function compileQuery(query: QueryNode): Result<SearchPlan, QueryCompileError> {
-  return compileNode(query).map(expr => {
-    const highlights: Highlights = { patterns: new Map(), symbols: new Map() }
-    collectHighlight(query, true, highlights)
-    return { expr: simplify(expr), highlight: [...highlights.patterns.values()], symbols: [...highlights.symbols.values()] }
+  return splitQuery(query).andThen(({ query: rest, ref, history }) => {
+    const compiled: Compiled = rest ? compileNode(rest) : Result.ok({ op: 'all' })
+    return compiled.map(expr => {
+      const highlights: Highlights = { patterns: new Map(), symbols: new Map() }
+      if (rest) collectHighlight(rest, true, highlights)
+      return {
+        expr: simplify(expr),
+        highlight: [...highlights.patterns.values()],
+        symbols: [...highlights.symbols.values()],
+        ...(ref !== undefined ? { ref } : {}),
+        ...(history ? { history } : {}),
+      }
+    })
   })
 }

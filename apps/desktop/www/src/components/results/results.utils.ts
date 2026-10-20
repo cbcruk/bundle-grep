@@ -6,17 +6,24 @@
 
 import { parseQuery, type QueryNode } from '@bundle-grep/core/query'
 
-function hasSymbol(node: QueryNode, positive: boolean): boolean {
-  if (node.type === 'match') return positive && node.field === 'symbol'
-  if (node.type === 'not') return hasSymbol(node.child, !positive)
-  if (node.type === 'and' || node.type === 'or') return node.children.some(child => hasSymbol(child, positive))
+function hasField(node: QueryNode, field: string, positive: boolean): boolean {
+  if (node.type === 'match') return positive && node.field === field
+  if (node.type === 'not') return hasField(node.child, field, !positive)
+  if (node.type === 'and' || node.type === 'or') return node.children.some(child => hasField(child, field, positive))
   return false
 }
 
 /** Says whether a query looks for definitions: a `symbol:` qualifier under an even number of negations. */
 export function usesSymbol(query: string): boolean {
   return parseQuery(query)
-    .map(node => hasSymbol(node, true))
+    .map(node => hasField(node, 'symbol', true))
+    .unwrapOr(false)
+}
+
+/** Says whether a query searches commits: a `history:` qualifier that is not negated. */
+export function usesHistory(query: string): boolean {
+  return parseQuery(query)
+    .map(node => hasField(node, 'history', true))
     .unwrapOr(false)
 }
 

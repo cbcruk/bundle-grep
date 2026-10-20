@@ -4,26 +4,31 @@ import { navigate } from '../../hooks/use-route'
 import { isPageKey, isTyping } from '../../lib/keyboard'
 import { groupByRepo } from '../../lib/group'
 import { toggleFacet } from '../../lib/query-edit'
+import { commitRoute, fileRoute } from '../../lib/result-route'
+import { CommitResult } from '../commit-result/commit-result'
 import { FileResult } from '../file-result/file-result'
 import { Link } from '../link/link'
 import { QueryError } from '../query-error/query-error'
+import type { CommitResult as CommitEvent, FileResult as FileEvent } from '../../hooks/use-search.types'
 import type { ResultsProps } from './results.types'
-import { plural, usesSymbol } from './results.utils'
+import { plural, usesHistory, usesSymbol } from './results.utils'
 import './results.css'
 
 /**
  * The results column: a summary, archive warnings, failures, and the
- * matching files grouped by repository.
+ * matching files — or commits, for `history:` — grouped by repository.
  *
- * `j`/`k` or the arrow keys move between files, and `Enter` or `o` opens one.
+ * `j`/`k` or the arrow keys move between results, and `Enter` or `o` opens one.
  * Moving also works while a button such as "Show more" keeps focus after a
  * click; opening does not, so `Enter` still presses the button.
  */
 export function Results({ query, search, limit, maxLimit, onShowMore, symbolLanguages }: ResultsProps): React.JSX.Element {
   const [selected, setSelected] = useState(-1)
   const cards = useRef<(HTMLElement | null)[]>([])
-  const { status, archive, files, failures, done, error } = search
-  const groups = useMemo(() => groupByRepo(files), [files])
+  const { status, archive, files, commits, failures, done, error } = search
+  const history = usesHistory(query)
+  const items = useMemo((): (FileEvent | CommitEvent)[] => [...files, ...commits], [files, commits])
+  const groups = useMemo(() => groupByRepo(items), [items])
   const ordered = useMemo(() => groups.flatMap(group => group.files), [groups])
 
   useEffect(() => setSelected(-1), [query, limit])
@@ -39,11 +44,11 @@ export function Results({ query, search, limit, maxLimit, onShowMore, symbolLang
         event.preventDefault()
         setSelected(index => Math.max(index - 1, 0))
       } else if ((event.key === 'Enter' || event.key === 'o') && selected >= 0 && !onButton) {
-        const file = ordered[selected]
-        if (!file) return
+        const item = ordered[selected]
+        const route = item && (item.type === 'file' ? fileRoute(query, item) : commitRoute(query, item))
+        if (!route) return
         event.preventDefault()
-        const line = file.lines.find(candidate => !candidate.context)?.number
-        navigate({ view: 'file', q: query, repo: file.repo, path: file.path, ...(line ? { line } : {}) })
+        navigate(route)
       }
     }
     window.addEventListener('keydown', onKeyDown)
@@ -56,18 +61,19 @@ export function Results({ query, search, limit, maxLimit, onShowMore, symbolLang
 
   if (status === 'error' && error) return <QueryError query={query} error={error} />
 
-  const indexOf = new Map(ordered.map((file, index) => [file, index]))
-  const total = done?.totalFiles ?? files.length
+  const indexOf = new Map(ordered.map((item, index) => [item, index]))
+  const noun = history ? 'commit' : 'file'
+  const total = (history ? done?.totalCommits : done?.totalFiles) ?? items.length
 
   return (
     <div className="results">
       <p className="results-summary" aria-live="polite">
         {status === 'running' ? (
-          <>Searching… {plural(files.length, 'file')} so far</>
+          <>Searching… {plural(items.length, noun)} so far</>
         ) : (
           <>
-            {plural(total, 'file')}
-            {done?.truncated && ` (showing the first ${files.length.toLocaleString('en')})`}
+            {plural(total, noun)}
+            {done?.truncated && ` (showing the first ${items.length.toLocaleString('en')})`}
             {done?.stopped === 'timeout' && ' — stopped early because the search took too long'}
           </>
         )}
@@ -105,9 +111,9 @@ export function Results({ query, search, limit, maxLimit, onShowMore, symbolLang
         </p>
       ))}
 
-      {status === 'done' && files.length === 0 && archive && archive.repos > 0 && (
+      {status === 'done' && items.length === 0 && archive && archive.repos > 0 && (
         <p className="results-empty">
-          No files matched.
+          {history ? 'No commits matched.' : 'No files matched.'}
           {usesSymbol(query) && symbolLanguages.length > 0 && (
             <>
               {' '}
@@ -124,18 +130,15 @@ export function Results({ query, search, limit, maxLimit, onShowMore, symbolLang
               {group.repo}
             </Link>
           </h2>
-          {group.files.map(file => {
-            const index = indexOf.get(file)!
-            return (
-              <FileResult
-                key={file.path}
-                ref={element => {
-                  cards.current[index] = element
-                }}
-                query={query}
-                file={file}
-                selected={index === selected}
-              />
+          {group.files.map(item => {
+            const index = indexOf.get(item)!
+            const ref = (element: HTMLElement | null): void => {
+              cards.current[index] = element
+            }
+            return item.type === 'file' ? (
+              <FileResult key={item.path} ref={ref} query={query} file={item} selected={index === selected} />
+            ) : (
+              <CommitResult key={item.commit.sha} ref={ref} query={query} result={item} selected={index === selected} />
             )
           })}
         </section>

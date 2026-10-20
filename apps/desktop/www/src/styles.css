@@ -19,6 +19,8 @@
   --attention-fg: #9a6700;
   --attention-bg: #fff8c5;
   --success-fg: #1a7f37;
+  --added-bg: #dafbe1;
+  --removed-bg: #ffebe9;
   --shadow: 0 8px 24px rgb(140 149 159 / 0.2);
 }
 
@@ -42,6 +44,8 @@
     --attention-fg: #d29922;
     --attention-bg: rgb(187 128 9 / 0.15);
     --success-fg: #3fb950;
+    --added-bg: rgb(46 160 67 / 0.15);
+    --removed-bg: rgb(248 81 73 / 0.1);
     --shadow: 0 8px 24px rgb(1 4 9 / 0.8);
   }
 }

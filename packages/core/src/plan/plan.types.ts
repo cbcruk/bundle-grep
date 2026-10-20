@@ -11,7 +11,7 @@
  * @module
  */
 
-import type { FilterKey, Pattern } from '../query/query.types'
+import type { FilterKey, Pattern, QueryNode } from '../query/query.types'
 import type { SymbolIndex } from '../symbols/symbols.types'
 
 /** Every file in the tree. */
@@ -78,8 +78,8 @@ export interface SymbolLeaf {
 export interface FilterLeaf {
   /** Discriminant. */
   op: 'filter'
-  /** The qualifier key; `language:` compiles to a {@linkcode LanguageLeaf} instead. */
-  key: Exclude<FilterKey, 'language'>
+  /** The qualifier key; `language:` compiles to a {@linkcode LanguageLeaf} instead, and `ref:` to {@linkcode SearchPlan.ref}. */
+  key: Exclude<FilterKey, 'language' | 'ref'>
   /** The qualifier value. */
   value: string
 }
@@ -109,6 +109,26 @@ export type FileExpr = Expr<FileLeaf>
 /** An expression that may still depend on which repository is searched. */
 export type QueryExpr = Expr<FileLeaf | FilterLeaf>
 
+/** What `history:` looks for in the lines commits changed. */
+export interface HistoryPattern {
+  /** A POSIX extended regular expression, as `git log -G` takes it. */
+  regex: string
+  /** `false` only when the query opted out with a leading `(?-i)`. */
+  ignoreCase: boolean
+  /** The pattern as written, for highlighting changed lines. */
+  pattern: Pattern
+}
+
+/** A query with its top-level `ref:` and `history:` taken out, from {@linkcode splitQuery}. */
+export interface SplitQuery {
+  /** What is left, or `undefined` when nothing is. */
+  query?: QueryNode
+  /** The `ref:` value. */
+  ref?: string
+  /** The `history:` pattern. */
+  history?: HistoryPattern
+}
+
 /** A compiled query. */
 export interface SearchPlan {
   /** Which files match. */
@@ -120,6 +140,14 @@ export interface SearchPlan {
   highlight: Pattern[]
   /** The `symbol:` leaves whose definitions are worth showing, counted the same way. */
   symbols: SymbolLeaf[]
+  /** The tree to search instead of `HEAD`, from `ref:`; repositories without it are skipped. */
+  ref?: string
+  /**
+   * The change to look for, from `history:`. When set, the search lists
+   * commits instead of files, and {@linkcode SearchPlan.expr} only narrows
+   * which changed files count.
+   */
+  history?: HistoryPattern
 }
 
 /** What `language:` needs to know about one Linguist language. */

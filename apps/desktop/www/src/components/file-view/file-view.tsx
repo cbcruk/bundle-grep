@@ -1,4 +1,4 @@
-import { useEffect, useMemo } from 'react'
+import { useEffect } from 'react'
 
 import { useBlob } from '../../hooks/use-blob'
 import { navigate } from '../../hooks/use-route'
@@ -11,14 +11,13 @@ import { lineId } from './file-view.utils'
 import './file-view.css'
 
 /**
- * One file at `HEAD`, with line numbers.
+ * One file at `HEAD`, or at the commit the route names, with line numbers.
  *
  * The line the address names is marked and scrolled to, and the matches the
  * search found in this file are highlighted. `Escape` goes back to the results.
  */
-export function FileView({ route, matches }: FileViewProps): React.JSX.Element {
-  const blob = useBlob(route.repo, route.path)
-  const ranges = useMemo(() => new Map(matches.filter(line => !line.context).map(line => [line.number, line.ranges])), [matches])
+export function FileView({ route, highlights }: FileViewProps): React.JSX.Element {
+  const blob = useBlob(route.repo, route.path, route.ref)
   const back = { view: 'search', q: route.q } as const
 
   useEffect(() => {
@@ -50,6 +49,11 @@ export function FileView({ route, matches }: FileViewProps): React.JSX.Element {
             {index === all.length - 1 ? <strong>{segment}</strong> : segment}
           </span>
         ))}
+        {route.ref && (
+          <code className="file-view-ref" title={route.ref}>
+            @ {route.ref.slice(0, 7)}
+          </code>
+        )}
       </nav>
       <div className="file-view-body">
         {blob.status === 'loading' && <p className="file-view-message">Loading…</p>}
@@ -71,7 +75,7 @@ export function FileView({ route, matches }: FileViewProps): React.JSX.Element {
                       number={number}
                       to={{ ...route, line: number }}
                       replace
-                      segments={segments(text, ranges.get(number) ?? [])}
+                      segments={segments(text, highlights.get(number) ?? [])}
                       context={false}
                       marked={number === route.line}
                     />

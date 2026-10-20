@@ -4,10 +4,10 @@
  * @module
  */
 
-import type { MatchRange, SearchLine } from '@bundle-grep/core'
+import type { ChangedLine, MatchRange, SearchLine } from '@bundle-grep/core'
 
 import { printable } from './ansi'
-import type { DoneEvent, FileEvent, Styles } from './format.types'
+import type { CommitEvent, DoneEvent, FileEvent, Styles } from './format.types'
 
 function highlight(text: string, ranges: readonly MatchRange[], styles: Styles): string {
   let out = ''
@@ -47,6 +47,29 @@ export function formatFile(event: FileEvent, styles: Styles, separate: boolean):
   return out
 }
 
+function formatChange(path: string, line: ChangedLine, styles: Styles): string {
+  const sign = line.change === 'added' ? styles.green('+') : styles.red('-')
+  return `${styles.magenta(path)}:${sign}${styles.green(String(line.number))}:${highlight(printable(line.text), line.ranges, styles)}`
+}
+
+/**
+ * Formats one commit `history:` found: a `sha date subject` line, then each
+ * matching change as `path:+line:text` or `path:-line:text`.
+ *
+ * The sha is abbreviated to 7 characters and the date is the author date's
+ * day. An added line's number is in the commit's version of the file, a
+ * removed line's in its parent's.
+ */
+export function formatCommit(event: CommitEvent, styles: Styles): string {
+  const { sha, date, subject } = event.commit
+  let out = `${styles.yellow(sha.slice(0, 7))} ${styles.dim(date.slice(0, 10))} ${printable(subject)}\n`
+  for (const file of event.files) {
+    const path = printable(file.path)
+    for (const line of file.lines) out += `${formatChange(path, line, styles)}\n`
+  }
+  return out
+}
+
 /** Formats the repository heading printed before its first file. */
 export function formatRepoHeading(repo: string, first: boolean, styles: Styles): string {
   return `${first ? '' : '\n'}${styles.bold(printable(repo))}\n`
@@ -55,12 +78,14 @@ export function formatRepoHeading(repo: string, first: boolean, styles: Styles):
 /**
  * Summarises a finished search, such as `12 files in 3 repositories`, without a line break.
  *
+ * A `history:` search counts commits instead, as `4 commits in 2 repositories`.
  * Says when the results were cut at the limit, and when the search stopped
  * early.
  */
 export function formatSummary(done: DoneEvent, shown: number): string {
   const repos = Object.keys(done.facets.repos).length
-  const parts = [`${plural(done.totalFiles, 'file')} in ${plural(repos, 'repository', 'repositories')}`]
+  const found = done.totalCommits === undefined ? plural(done.totalFiles, 'file') : plural(done.totalCommits, 'commit')
+  const parts = [`${found} in ${plural(repos, 'repository', 'repositories')}`]
   if (done.truncated) parts.push(`showing ${shown}; raise --limit for more`)
   if (done.stopped === 'aborted') parts.push('stopped early')
   if (done.stopped === 'timeout') parts.push('timed out')

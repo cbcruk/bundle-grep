@@ -34,6 +34,8 @@ export interface CodeLineProps {
   segments: Segment[]
   /** `true` for a line shown only as context around a match, which is dimmed. */
   context: boolean
+  /** In a commit: whether the commit added the line or removed it, shown with a `+` or `-`. */
+  change?: 'added' | 'removed'
   /** In the file view: `true` for the line the address names. */
   marked?: boolean
   /** The row's element id, for scrolling to it. */

@@ -12,9 +12,9 @@ import type { Keyword, Token } from './token.types'
 
 const KEYWORDS: ReadonlySet<string> = new Set<Keyword>(['AND', 'OR', 'NOT'])
 
-const MATCH_KEYS: Readonly<Record<string, MatchField>> = { content: 'content', path: 'path', symbol: 'symbol' }
+const MATCH_KEYS: Readonly<Record<string, MatchField>> = { content: 'content', path: 'path', symbol: 'symbol', history: 'history' }
 
-const FILTER_KEYS: ReadonlySet<string> = new Set<FilterKey>(['repo', 'org', 'user', 'language', 'is'])
+const FILTER_KEYS: ReadonlySet<string> = new Set<FilterKey>(['repo', 'org', 'user', 'language', 'is', 'ref'])
 
 const IS_VALUES: ReadonlySet<string> = new Set<IsValue>(['fork', 'archived'])
 

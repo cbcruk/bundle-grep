@@ -10,6 +10,7 @@ import { readFile, rename, rm, writeFile } from 'node:fs/promises'
 import { join } from 'node:path'
 
 import { catBlobs } from '../git/cat-blobs'
+import { resolveCommit } from '../git/resolve-commit'
 import { runGit, splitNul } from '../git/run-git'
 import { loadExtractor } from './extract-symbols'
 import { grammarFor, INDEXER } from './grammars'
@@ -116,7 +117,9 @@ function coveredFiles(lsTree: Buffer): TreeFile[] {
  * only the rest are parsed again. Files over 1 MiB and symbolic links are
  * left out, and binary files are listed as defining nothing.
  *
- * Saving the index is best effort: a repository that cannot be written to is
+ * Only an index of `HEAD`'s commit is saved, so searching another ref does
+ * not displace it; another ref's index still reuses what the saved one
+ * knows. Saving is best effort: a repository that cannot be written to is
  * indexed again next time.
  *
  * @returns The index, or a {@linkcode SymbolIndexError} when git fails or
@@ -180,7 +183,8 @@ export async function symbolIndex(
       files.set(file.path, { oid: file.oid, symbols: known.get(key(file.grammar, file.oid)) ?? [] })
     }
     const index: SymbolIndex = { commit, files }
-    await save(path, index)
+    const head = ref === 'HEAD' ? commit : (await resolveCommit(gitDir, 'HEAD', signal)).unwrapOr(undefined)
+    if (head === commit) await save(path, index)
     return Result.ok(index)
   })
 }

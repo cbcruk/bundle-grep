@@ -1,3 +1,4 @@
+import type { MatchRange } from '@bundle-grep/core'
 import { useEffect, useMemo, useRef, useState } from 'react'
 
 import { FileView } from '../components/file-view/file-view'
@@ -10,6 +11,7 @@ import { useArchive, useLanguages, useSymbolLanguages } from '../hooks/use-archi
 import { navigate, useRoute } from '../hooks/use-route'
 import { useSearch } from '../hooks/use-search'
 import { isTyping } from '../lib/keyboard'
+import { routeHighlights } from '../lib/result-route'
 import './app.css'
 
 /** Files a search asks for at first. */
@@ -51,10 +53,10 @@ export function App(): React.JSX.Element {
     [repos, languages],
   )
 
-  const matches = useMemo(() => {
-    if (route.view !== 'file') return []
-    return search.files.find(file => file.repo === route.repo && file.path === route.path)?.lines ?? []
-  }, [route, search.files])
+  const highlights = useMemo(
+    () => (route.view === 'file' ? routeHighlights(route, search.files, search.commits) : new Map<number, MatchRange[]>()),
+    [route, search.files, search.commits],
+  )
 
   return (
     <div className="app">
@@ -69,7 +71,7 @@ export function App(): React.JSX.Element {
       </header>
       <main className="app-main">
         {route.view === 'repos' && <ReposView query={route.q} repos={repos} onChanged={reload} />}
-        {route.view === 'file' && <FileView route={route} matches={matches} />}
+        {route.view === 'file' && <FileView route={route} highlights={highlights} />}
         {route.view === 'search' &&
           (route.q === '' ? (
             <Start />
@@ -99,6 +101,11 @@ function Start(): React.JSX.Element {
         Queries follow GitHub code search: <code>useState language:typescript</code>, <code>repo:owner/name</code>,{' '}
         <code>path:/src/**</code>, <code>symbol:useState</code>, <code>/regex/</code>, <code>"exact phrase"</code>,{' '}
         <code>NOT</code>, <code>OR</code>.
+      </p>
+      <p>
+        <code>ref:v1.0 useState</code> searches a branch, tag, or commit instead of the default branch, and{' '}
+        <code>history:useState path:src</code> finds the commits that added or removed matching lines, deleted code
+        included.
       </p>
       <p>
         Press <kbd>/</kbd> to search, <kbd>j</kbd>/<kbd>k</kbd> to move between results, <kbd>Enter</kbd> to open one,

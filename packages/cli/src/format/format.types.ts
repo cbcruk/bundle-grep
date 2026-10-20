@@ -9,6 +9,9 @@ import type { SearchEvent } from '@bundle-grep/core'
 /** A `file` event from {@linkcode search}. */
 export type FileEvent = Extract<SearchEvent, { type: 'file' }>
 
+/** A `commit` event from {@linkcode search}, for `history:`. */
+export type CommitEvent = Extract<SearchEvent, { type: 'commit' }>
+
 /** The `done` event from {@linkcode search}. */
 export type DoneEvent = Extract<SearchEvent, { type: 'done' }>
 

@@ -22,7 +22,11 @@ describe('suggest', () => {
   test('qualifier names for a bare word', () => {
     expect(at('la').map(s => s.label)).toEqual(['language:'])
     expect(at('sym').map(s => s.label)).toEqual(['symbol:'])
-    expect(at('x -re')).toEqual([{ label: 'repo:', insert: '-repo:', complete: false }])
+    expect(at('hi').map(s => s.label)).toEqual(['history:'])
+    expect(at('x -re')).toEqual([
+      { label: 'repo:', insert: '-repo:', complete: false },
+      { label: 'ref:', insert: '-ref:', complete: false },
+    ])
     expect(at('zzz')).toEqual([])
   })
 

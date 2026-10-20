@@ -83,9 +83,11 @@ describe('symbolIndex', () => {
     }
   })
 
-  test('another ref can be indexed', async () => {
+  test('another ref can be indexed without displacing the saved index of HEAD', async () => {
+    const saved = readFileSync(indexFile(), 'utf8')
     const index = (await symbolIndex(gitDir, { ref: 'HEAD~1' })).unwrap()
     expect(summary(index)['src/b.py']).toEqual(['beta:1'])
+    expect(readFileSync(indexFile(), 'utf8')).toBe(saved)
     const missing = await symbolIndex(gitDir, { ref: 'nope' })
     expect(missing.isErr() && missing.error).toBeInstanceOf(GitError)
   })

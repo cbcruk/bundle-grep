@@ -52,3 +52,8 @@
 .file-view .code {
   margin: 4px 0;
 }
+
+.file-view-ref {
+  margin-left: 8px;
+  color: var(--fg-muted);
+}

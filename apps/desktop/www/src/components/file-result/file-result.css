@@ -95,3 +95,18 @@
   color: inherit;
   border-radius: 2px;
 }
+
+.code-change {
+  width: 1%;
+  padding: 0 4px 0 0;
+  user-select: none;
+  color: var(--fg-muted);
+}
+
+.code-line.added {
+  background: var(--added-bg);
+}
+
+.code-line.removed {
+  background: var(--removed-bg);
+}
