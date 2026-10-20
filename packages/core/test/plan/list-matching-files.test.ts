@@ -1,4 +1,6 @@
 import { afterAll, beforeAll, describe, expect, test } from 'bun:test'
+import { execFileSync } from 'node:child_process'
+import { mkdirSync, rmSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 
 import { compileQuery } from '../../src/plan/compile-query'
@@ -145,5 +147,44 @@ describe('telling text from binary files', () => {
     const all = await list('path:many')
     expect(all).toHaveLength(1100)
     expect(all).not.toContain('many/blob.bin')
+  })
+})
+
+const IDENTITY = {
+  GIT_CONFIG_GLOBAL: '/dev/null',
+  GIT_CONFIG_NOSYSTEM: '1',
+  GIT_AUTHOR_NAME: 'a',
+  GIT_AUTHOR_EMAIL: 'a@example.com',
+  GIT_COMMITTER_NAME: 'a',
+  GIT_COMMITTER_EMAIL: 'a@example.com',
+}
+
+describe('telling text from binary files, as git does', () => {
+  test('a name that is not valid UTF-8 is still found by path:, NOT, and language:', async () => {
+    using odd = createFixtureRepo([{ message: 'init', files: { 'ok.txt': 'hello\n' } }])
+    const dir = join(odd.root, 'repo.git')
+    runGit(odd.root, ['clone', '--quiet', '--bare', odd.repo, dir])
+    const git = (args: string[], input?: string | Buffer): string =>
+      execFileSync('git', args, { cwd: dir, env: { ...process.env, ...IDENTITY }, input }).toString().trim()
+    const oid = git(['hash-object', '-w', '--stdin'], 'hello\n')
+    const name = Buffer.concat([Buffer.from('caf'), Buffer.from([0xe9]), Buffer.from('.txt')])
+    const listing = Buffer.concat([Buffer.from(`100644 blob ${oid}\t`), name, Buffer.from(`\n100644 blob ${oid}\tok.txt\n`)])
+    const commit = git(['commit-tree', git(['mktree'], listing), '-m', 'odd'])
+    const list = async (query: string): Promise<string[]> => {
+      const plan = parseQuery(query).andThen(compileQuery).unwrap()
+      return (await listMatchingFiles({ gitDir: dir, ref: commit, expr: specializePlan(plan.expr, () => true) })).unwrap()
+    }
+    for (const query of ['path:txt', 'NOT zzz', 'language:text', 'hello']) expect(await list(query)).toHaveLength(2)
+  })
+
+  test('a file git treats as binary through attributes is left out of symbol: answers too', async () => {
+    mkdirSync(join(gitDir, 'info'), { recursive: true })
+    writeFileSync(join(gitDir, 'info', 'attributes'), 'src/use-counter.ts binary\n')
+    try {
+      expect(await search('symbol:True path:src')).toEqual([])
+      expect(await search('content:useState')).toEqual(['test/use-counter.test.ts'])
+    } finally {
+      rmSync(join(gitDir, 'info', 'attributes'))
+    }
   })
 })

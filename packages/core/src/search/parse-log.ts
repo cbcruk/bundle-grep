@@ -27,7 +27,8 @@ const PATCH_RECORD = new RegExp(`(?:^|\n)${MARK}(?=${ID}\0)`)
  *
  * The output is read field by field, so a path holding the marker byte is
  * still read as a path. Call `end` after the last chunk to hand over the
- * final commit.
+ * final commit; `open` shows the commit still being read while the output
+ * so far ends between two fields.
  */
 export function createNameLogParser(onCommit: (commit: LoggedCommit) => void): NameLogParser {
   let pending = ''
@@ -43,6 +44,7 @@ export function createNameLogParser(onCommit: (commit: LoggedCommit) => void): N
     }
   }
   return {
+    open: () => (pending === '' ? current : undefined),
     push: text => {
       const fields = (pending + text).split('\0')
       pending = fields.pop()!

@@ -26,6 +26,17 @@ describe('parseNameLog', () => {
     ])
   })
 
+  test('shows the commit being read while the output ends between fields', () => {
+    const a = 'a'.repeat(40)
+    const parser = createNameLogParser(() => {})
+    parser.push(`\x1e${a}\0\nx\0`)
+    expect(parser.open()).toEqual({ sha: a, files: ['x'] })
+    parser.push('y')
+    expect(parser.open()).toBeUndefined()
+    parser.push('\0')
+    expect(parser.open()).toEqual({ sha: a, files: ['x', 'y'] })
+  })
+
   test('a path holding the marker byte is still a path', () => {
     const sha = 'c'.repeat(40)
     expect(parseNameLog(`\x1e${sha}\0\na\x1eb\0\x1e\0`)).toEqual([{ sha, files: ['a\x1eb', '\x1e'] }])

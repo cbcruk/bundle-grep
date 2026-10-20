@@ -182,3 +182,11 @@ export interface ValidateRegexesOptions {
   /** Kills any git still running; the check then fails with a `GitError`. */
   signal?: AbortSignal
 }
+
+/** The regular files of a tree, as `git ls-tree` lists them. */
+export interface TreeFiles {
+  /** Every regular file in the tree, text or binary. */
+  all: Set<string>
+  /** The empty ones, which are text but which `git grep` never lists. */
+  empty: Set<string>
+}

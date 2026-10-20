@@ -240,7 +240,7 @@ export interface SearchOptions<Repo extends SearchRepo = SearchRepo> {
    * definitions per file for `symbol:`. Defaults to `20`.
    */
   maxMatchesPerFile?: number
-  /** Repositories searched at once, at least `1`. Defaults to the number of CPUs, at most `8`. */
+  /** Repositories searched at once, at least `1`. Defaults to the number of CPUs, from `4` to `8`. */
   concurrency?: number
   /** Stops the search after this many milliseconds. */
   timeoutMs?: number

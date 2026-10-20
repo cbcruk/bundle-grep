@@ -7,13 +7,14 @@
 import { Result } from 'better-result'
 
 import type { GitError } from '../git/git.errors'
+import { literalPathspecChunks } from '../git/literal-pathspecs'
 import { runGit, splitNul } from '../git/run-git'
 import { symbolMatcher } from '../symbols/match-symbols'
 import { symbolIndex } from '../symbols/symbol-index'
 import type { SymbolIndex, SymbolIndexError } from '../symbols/symbols.types'
 import { grepArgs } from './grep-args'
 import { matchesLanguage } from './match-path'
-import type { FileExpr, LanguageLeaf, ListMatchingFilesOptions } from './plan.types'
+import type { FileExpr, LanguageLeaf, ListMatchingFilesOptions, TreeFiles } from './plan.types'
 
 type FileSet = Result<Set<string>, SymbolIndexError>
 
@@ -54,16 +55,6 @@ function stripRef(paths: string[], ref: string): string[] {
 /** More paths than this are checked for binary content by reading the whole tree once instead. */
 const CHECK_LIMIT = 1000
 
-/** Paths per `git grep` when checking named files, to stay well under the argument length limit. */
-const CHECK_CHUNK = 250
-
-interface TreeFiles {
-  /** Every regular file in the tree, text or binary. */
-  all: Set<string>
-  /** The empty ones, which are text but which `git grep` never lists. */
-  empty: Set<string>
-}
-
 /** Lists the regular files of a tree from `git ls-tree`, without reading any of them. */
 async function listTreeFiles(gitDir: string, ref: string, signal: AbortSignal | undefined): Promise<Result<TreeFiles, GitError>> {
   const tree = await runGit(['ls-tree', '-r', '-l', '-z', ref], { cwd: gitDir, signal })
@@ -79,35 +70,36 @@ async function listTreeFiles(gitDir: string, ref: string, signal: AbortSignal | 
   })
 }
 
-/**
- * Lists which of some non-empty files `git grep -I` reads as text.
- *
- * A few files are named to git, so only they are read; many are found by
- * reading the whole tree once, which is cheaper than naming them all.
- */
-async function textFiles(
+/** Lists the non-empty files `git grep -I` reads as text, among those the pathspecs name, or in the whole tree for none. */
+async function grepTextFiles(
+  gitDir: string,
+  ref: string,
+  pathspecs: readonly string[],
+  signal: AbortSignal | undefined,
+): Promise<Result<Set<string>, GitError>> {
+  const args = ['grep', '--no-color', '-I', '-l', '-z', '-e', '', ref, ...(pathspecs.length ? ['--', ...pathspecs] : [])]
+  const result = await runGit(args, { cwd: gitDir, allowExitCodes: [1], signal })
+  return result.map(({ stdout }) => new Set(stripRef(splitNul(stdout), ref)))
+}
+
+/** Lists which of some non-empty files are text, naming them to git in runs that fit on a command line. */
+async function namedTextFiles(
   gitDir: string,
   ref: string,
   paths: readonly string[],
   signal: AbortSignal | undefined,
 ): Promise<Result<Set<string>, GitError>> {
-  const grep = async (pathspecs: string[]): Promise<Result<string[], GitError>> => {
-    const args = ['grep', '--no-color', '-I', '-l', '-z', '-e', '', ref, ...(pathspecs.length ? ['--', ...pathspecs] : [])]
-    const result = await runGit(args, { cwd: gitDir, allowExitCodes: [1], signal })
-    return result.map(({ stdout }) => stripRef(splitNul(stdout), ref))
-  }
-  const batches =
-    paths.length > CHECK_LIMIT
-      ? [[]]
-      : Array.from({ length: Math.ceil(paths.length / CHECK_CHUNK) }, (_, index) =>
-          paths.slice(index * CHECK_CHUNK, (index + 1) * CHECK_CHUNK).map(path => `:(literal)${path}`),
-        )
   const text = new Set<string>()
-  for (const result of await Promise.all(batches.map(grep))) {
+  for (const result of await Promise.all(literalPathspecChunks(paths).map(chunk => grepTextFiles(gitDir, ref, chunk, signal)))) {
     if (result.isErr()) return result
     for (const path of result.value) text.add(path)
   }
   return Result.ok(text)
+}
+
+function hasNot(expr: FileExpr): boolean {
+  if (expr.op === 'not') return true
+  return (expr.op === 'and' || expr.op === 'or') && expr.children.some(hasNot)
 }
 
 /**
@@ -118,9 +110,12 @@ async function textFiles(
  * tree's symbol index, loaded once.
  *
  * Binary files match nothing — not even a `NOT` or a `path:` — as GitHub
- * does not index them. Files a `grep` or `symbol:` leaf found are text
- * already, so only the rest of the answer, such as the files a `path:`
- * selected, is read to tell them apart.
+ * does not index them, and git decides which are binary, attributes
+ * included. Files a `grep` leaf found are text already, so only the rest of
+ * the answer, such as the files a `path:` selected, is read to tell them
+ * apart: by name when there are few, and otherwise, or when a name is not
+ * valid UTF-8 and cannot be named back to git, by reading the whole tree,
+ * which starts at once for an expression with a `NOT`.
  *
  * @returns The matching paths, sorted, or the first failure: git's, or
  * tree-sitter's while building a symbol index.
@@ -131,6 +126,7 @@ export async function listMatchingFiles(options: ListMatchingFilesOptions): Prom
   let tree: Promise<Result<TreeFiles, GitError>> | undefined
   let symbols: Promise<Result<SymbolIndex, SymbolIndexError>> | undefined
   const known = new Set<string>()
+  const wholeTree = hasNot(expr) ? grepTextFiles(gitDir, ref, pathspecs, signal) : undefined
 
   const treeFiles = (): Promise<Result<TreeFiles, GitError>> => {
     tree ??= listTreeFiles(gitDir, ref, signal)
@@ -160,8 +156,8 @@ export async function listMatchingFiles(options: ListMatchingFilesOptions): Prom
       case 'symbol': {
         symbols ??= options.symbols ? Promise.resolve(Result.ok(options.symbols)) : symbolIndex(gitDir, { ref, signal })
         const matches = symbolMatcher([node])
-        return (await symbols).map(index =>
-          found(new Set([...index.files].filter(([, file]) => file.symbols.some(matches)).map(([path]) => path))),
+        return (await symbols).map(
+          index => new Set([...index.files].filter(([, file]) => file.symbols.some(matches)).map(([path]) => path)),
         )
       }
       case 'grep': {
@@ -200,7 +196,8 @@ export async function listMatchingFiles(options: ListMatchingFilesOptions): Prom
   const files = await treeFiles()
   if (files.isErr()) return files
   const nonEmpty = unchecked.filter(path => !files.value.empty.has(path))
-  const text = await textFiles(gitDir, ref, nonEmpty, signal)
+  const named = nonEmpty.length <= CHECK_LIMIT && !nonEmpty.some(path => path.includes('\uFFFD'))
+  const text = await (wholeTree ?? (named ? namedTextFiles(gitDir, ref, nonEmpty, signal) : grepTextFiles(gitDir, ref, pathspecs, signal)))
   if (text.isErr()) return text
   const binary = new Set(nonEmpty.filter(path => !text.value.has(path)))
   return Result.ok([...matched.value].filter(path => !binary.has(path)).sort())

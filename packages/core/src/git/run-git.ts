@@ -19,6 +19,10 @@ const REPOSITORY_ENV = {
   GIT_ALTERNATE_OBJECT_DIRECTORIES: undefined,
   GIT_NAMESPACE: undefined,
   GIT_PREFIX: undefined,
+  GIT_LITERAL_PATHSPECS: undefined,
+  GIT_GLOB_PATHSPECS: undefined,
+  GIT_NOGLOB_PATHSPECS: undefined,
+  GIT_ICASE_PATHSPECS: undefined,
 }
 
 /**
@@ -31,7 +35,8 @@ const REPOSITORY_ENV = {
  *
  * Variables that point git at another repository, such as the `GIT_DIR` a
  * hook exports, are removed, so git always works on the repository at
- * {@linkcode RunGitOptions.cwd}.
+ * {@linkcode RunGitOptions.cwd}; so are the ones that change how pathspecs
+ * are read, such as `GIT_LITERAL_PATHSPECS`.
  *
  * @returns The output, or a {@linkcode GitError} when git cannot start or
  * exits with a status outside `0` and `allowExitCodes`.
