@@ -1,4 +1,4 @@
-import { beforeAll, describe, expect, test } from 'bun:test'
+import { beforeAll, describe, expect, test } from 'vitest'
 
 import { loadExtractor } from '../../src/symbols/extract-symbols'
 import { GRAMMARS, grammarFor, symbolLanguages } from '../../src/symbols/grammars'

@@ -1,4 +1,5 @@
-import { describe, expect, test } from 'bun:test'
+import { describe, expect, test } from 'vitest'
+import { spawnSync } from 'node:child_process'
 import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir, uptime } from 'node:os'
 import { join } from 'node:path'
@@ -27,7 +28,7 @@ describe('acquireRepoLock', () => {
 
   test('takes over a lock whose process is gone, or from before the last boot', async () => {
     using lock = lockPath()
-    const gone = Bun.spawnSync(['true']).pid
+    const gone = spawnSync('true').pid
     ;(await acquireRepoLock(lock.path)).unwrap()
 
     writeFileSync(lock.path, `${gone} ${boot()} x\n`)
@@ -56,7 +57,7 @@ describe('acquireRepoLock', () => {
 
   test('lets only one of several runs take over the same stale lock', async () => {
     using lock = lockPath()
-    const gone = Bun.spawnSync(['true']).pid
+    const gone = spawnSync('true').pid
     ;(await acquireRepoLock(lock.path)).unwrap()
 
     for (let trial = 0; trial < 50; trial++) {

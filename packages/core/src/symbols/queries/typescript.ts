@@ -1,4 +1,11 @@
-(public_field_definition name: (property_identifier) @name value: [(arrow_function) (function_expression)]) @definition.method
+/**
+ * The tags query for TypeScript and TSX added to the shared ECMAScript query.
+ *
+ * @module
+ */
+
+/** The query source, in tree-sitter's query language. */
+export const query: string = String.raw`(public_field_definition name: (property_identifier) @name value: [(arrow_function) (function_expression)]) @definition.method
 (function_signature name: (identifier) @name) @definition.function
 ((method_signature name: (property_identifier) @name) @definition.method
   (#not-eq? @name "constructor"))
@@ -9,3 +16,4 @@
 (enum_declaration name: (identifier) @name) @definition.enum
 (module name: [(identifier) @name (string (string_fragment) @name)]) @definition.module
 (internal_module name: [(identifier) (nested_identifier)] @name) @definition.module
+`

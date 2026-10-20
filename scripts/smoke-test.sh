@@ -1,12 +1,13 @@
 #!/usr/bin/env bash
-# Runs a compiled bundle-grep binary end to end against a throwaway repository.
-# Usage: scripts/smoke-test.sh <binary> [expected version]
+# Runs an installed bundle-grep end to end against a throwaway repository.
+# Usage: scripts/smoke-test.sh <bundle-grep executable> [expected version]
 set -euo pipefail
 
 binary=$(cd "$(dirname "$1")" && pwd)/$(basename "$1")
 expected=${2:-}
 work=$(mktemp -d)
-trap 'rm -rf "$work"' EXIT
+ui=
+trap 'if [[ -n $ui ]]; then kill "$ui" 2>/dev/null || true; fi; rm -rf "$work"' EXIT
 
 export GIT_CONFIG_GLOBAL=/dev/null GIT_CONFIG_NOSYSTEM=1
 export GIT_AUTHOR_NAME=smoke GIT_AUTHOR_EMAIL=smoke@example.com
@@ -45,5 +46,17 @@ rm -rf "$root/cache"
 "$binary" restore --root "$root"
 expect 'src/greet.ts' "search after restore found nothing" search 'path:greet language:typescript' --root "$root"
 "$binary" ui --help >/dev/null || fail "ui --help failed"
-grep -a -q '<title>bundle-grep</title>' "$binary" || fail "the search page is not embedded"
+
+"$binary" ui --no-open --root "$root" >"$work/ui.log" 2>&1 &
+ui=$!
+for _ in $(seq 100); do
+  if grep -q 'http://' "$work/ui.log"; then break; fi
+  sleep 0.1
+done
+url=$(grep -o 'http://[^ ]*' "$work/ui.log" | head -n 1) || fail "ui printed no URL: $(cat "$work/ui.log")"
+curl -fsS -o "$work/page.html" "${url%%#*}" || fail "ui does not answer"
+grep -q '<title>bundle-grep</title>' "$work/page.html" || fail "ui does not serve the search page"
+kill -INT "$ui"
+wait "$ui" || true
+ui=
 echo "smoke test passed"

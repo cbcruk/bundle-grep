@@ -1,4 +1,4 @@
-import { describe, expect, test } from 'bun:test'
+import { describe, expect, test } from 'vitest'
 
 import { parseQuery } from '../../src/query/parse-query'
 import type { QueryNode } from '../../src/query/query.types'

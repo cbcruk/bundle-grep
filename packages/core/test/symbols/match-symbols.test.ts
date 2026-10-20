@@ -1,4 +1,4 @@
-import { describe, expect, test } from 'bun:test'
+import { describe, expect, test } from 'vitest'
 
 import { compileQuery, parseQuery } from '../../src'
 import { symbolMatcher } from '../../src/symbols/match-symbols'

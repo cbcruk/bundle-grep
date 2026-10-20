@@ -6,30 +6,22 @@ Archive your git repositories as bundles and search them with
 
 ## Install
 
-Each [release](https://github.com/cbcruk/bundle-grep/releases) has a
-self-contained binary for macOS and Linux (glibc), on arm64 and x64, with a
-`SHA256SUMS` file. Download the one for your platform — `darwin-arm64`,
-`darwin-x64`, `linux-x64` or `linux-arm64` — with `gh` into an empty
-directory, check it, and put `bundle-grep` on your `PATH`:
+Requires [Node.js](https://nodejs.org) 24 or later.
 
 ```sh
-cd "$(mktemp -d)"
-gh release download --repo cbcruk/bundle-grep --pattern '*-darwin-arm64.tar.gz' --pattern SHA256SUMS
-shasum -a 256 --check --ignore-missing SHA256SUMS   # sha256sum --check --ignore-missing on Linux
-tar -xzf bundle-grep-*.tar.gz
-mkdir -p ~/.local/bin && mv bundle-grep ~/.local/bin/   # add ~/.local/bin to PATH if it is not there
+npm install --global bundle-grep
 bundle-grep --version
 ```
 
-The binaries are not signed. macOS blocks a binary downloaded through a
-browser until you clear its quarantine flag with
-`xattr -d com.apple.quarantine bundle-grep`; `gh` and `curl` do not set it.
+The package has no dependencies of its own: the CLI, the search page and the
+tree-sitter grammars are bundled into it. Each
+[release](https://github.com/cbcruk/bundle-grep/releases) also attaches the
+same `.tgz` with a `SHA256SUMS` file, for `npm install --global ./bundle-grep-<version>.tgz`.
 
 ## Usage
 
 Requires git, and, for GitHub sources, a logged-in
-[`gh`](https://cli.github.com). Running from a checkout instead of a release
-binary also requires [Bun](https://bun.com).
+[`gh`](https://cli.github.com).
 
 ```sh
 bundle-grep sync cbcruk                  # every repository of a user or organisation
@@ -71,8 +63,9 @@ lock each repository they update, and a second run on the same repository
 fails for it rather than racing, so overlapping scheduled runs are safe. A
 lock left by a run that was killed, or from before a reboot, is taken over.
 
-To run it on a schedule, give the scheduler the binary's absolute path and a
-`PATH` where it finds `git` and `gh`. On macOS, use a launchd agent: `gh`
+To run it on a schedule, give the scheduler the absolute path that
+`command -v bundle-grep` prints and a `PATH` where it finds `node`, `git` and
+`gh`. On macOS, use a launchd agent: `gh`
 keeps its token in the login keychain, which cron jobs may not be able to
 read. Save this as `~/Library/LaunchAgents/com.example.bundle-grep.plist`,
 with your own paths and source, and load it with
@@ -86,7 +79,7 @@ with your own paths and source, and load it with
   <key>Label</key><string>com.example.bundle-grep</string>
   <key>ProgramArguments</key>
   <array>
-    <string>/Users/you/.local/bin/bundle-grep</string>
+    <string>/opt/homebrew/bin/bundle-grep</string>
     <string>sync</string>
     <string>cbcruk</string>
     <string>--json</string>
@@ -104,7 +97,7 @@ with your own paths and source, and load it with
 On Linux, a cron line does the same, here every night at 3:00:
 
 ```cron
-0 3 * * * PATH=/usr/local/bin:/usr/bin:/bin $HOME/.local/bin/bundle-grep sync cbcruk --json >> $HOME/.bundle-grep/sync.log 2>&1
+0 3 * * * PATH=/usr/local/bin:/usr/bin:/bin /usr/local/bin/bundle-grep sync cbcruk --json >> $HOME/.bundle-grep/sync.log 2>&1
 ```
 
 Nobody is at the terminal then, so unless `GIT_SSH_COMMAND`, `GIT_SSH` or
@@ -167,7 +160,8 @@ negated or used inside `OR`.
 
 ## Development
 
-Requires [Bun](https://bun.com) >= 1.3.12, pnpm, and git.
+Requires Node.js 24 or later, pnpm, and git. Tests run with
+[Vitest](https://vitest.dev); `pnpm cli <command>` runs the CLI from source.
 
 ```sh
 pnpm install
@@ -178,21 +172,22 @@ pnpm test
 ```
 
 The search page is a Vite + React app in `apps/desktop/www`. Build it
-into one HTML file before running `bundle-grep ui` or compiling a binary, or
-work on it with the dev server, which `ui --dev-server` proxies:
+into one HTML file before running `bundle-grep ui` or packing, or work on it
+with the dev server, which `ui --dev-server` proxies:
 
 ```sh
-pnpm build:ui                                          # apps/desktop/www/dist/index.html
-bun build --compile packages/cli/src/main.ts --outfile bundle-grep
+pnpm build                                             # the UI, then the CLI bundle in packages/cli/dist
+pnpm --filter bundle-grep pack                         # bundle-grep-<version>.tgz
 
 pnpm dev:ui                                            # Vite on 127.0.0.1:5173
-bun packages/cli/src/main.ts ui --dev-server http://127.0.0.1:5173
+pnpm cli ui --dev-server http://127.0.0.1:5173
 ```
 
-`scripts/smoke-test.sh <binary> [version]` runs a compiled binary end to end
-against a throwaway repository. Pushing a tag `v<version>` that matches
-`packages/cli/package.json` builds every target, smoke-tests the ones a hosted
-runner can execute, and publishes them as a GitHub release.
+`scripts/smoke-test.sh <executable> [version]` runs an installed
+`bundle-grep` end to end against a throwaway repository, `ui` included.
+Pushing a tag `v<version>` that matches `packages/cli/package.json` packs the
+package, smoke-tests it on Linux and macOS, publishes it to npm, and attaches
+it to a GitHub release.
 
 `pnpm bench --dir <directory of bare repositories>` times searches at 10, 100
 and 500 repositories; [docs/performance.md](docs/performance.md) has the

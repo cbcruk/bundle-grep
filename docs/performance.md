@@ -6,6 +6,9 @@ backend is worth adding. Measured for issue #13; rerun with `pnpm bench`.
 ## Setup
 
 - Apple M1 Pro (8 cores), 16 GB, macOS 26.5, git 2.50.1, Bun 1.4.0.
+  These numbers were taken on Bun, before the move to Node.js (#38). On Node
+  24 a CLI search over 94 repositories takes about 0.1 s longer, half of it
+  startup (`bundle-grep --version` is 79 ms against Bun's 29 ms).
 - Corpus: 117 real repositories (116 non-empty), cloned bare. Their `HEAD`
   trees hold 30,073 files and 970 MB. The largest are PebbleOS (7,373 files,
   156 MB) and ant-design (4,257 files, 29,806 commits).

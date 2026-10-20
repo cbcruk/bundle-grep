@@ -16,6 +16,6 @@ export class UiNotBuiltError extends TaggedError('UiNotBuiltError')<{
 export class ServeError extends TaggedError('ServeError')<{
   /** Human-readable summary. */
   readonly message: string
-  /** What `Bun.serve` threw. */
+  /** Why listening failed. */
   readonly cause: unknown
 }> {}

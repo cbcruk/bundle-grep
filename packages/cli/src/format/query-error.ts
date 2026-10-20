@@ -5,6 +5,7 @@
  */
 
 import type { Span } from '@bundle-grep/core'
+import stringWidth from 'string-width'
 
 import { printable } from './ansi'
 import type { Styles } from './format.types'
@@ -29,8 +30,8 @@ import type { Styles } from './format.types'
 export function formatQueryError(query: string, error: { message: string; span: Span }, styles: Styles): string {
   const { offset, length } = error.span
   const shown = printable(query).replaceAll('\t', ' ')
-  const before = Bun.stringWidth(shown.slice(0, offset))
-  const width = Bun.stringWidth(shown.slice(offset, offset + length))
+  const before = stringWidth(shown.slice(0, offset))
+  const width = stringWidth(shown.slice(offset, offset + length))
   const caret = `${' '.repeat(before)}${'^'.repeat(Math.max(1, width))}`
   return `${styles.red('error:')} ${printable(error.message)}\n  ${shown}\n  ${styles.red(caret)}\n`
 }

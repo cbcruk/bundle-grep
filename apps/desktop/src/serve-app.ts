@@ -6,6 +6,9 @@
 
 import { Result } from 'better-result'
 import { randomBytes } from 'node:crypto'
+import { existsSync } from 'node:fs'
+import { readFile } from 'node:fs/promises'
+import { serve } from 'srvx'
 
 import { createApi } from './api/create-api'
 import { errorResponse } from './api/respond'
@@ -45,13 +48,20 @@ export async function serveApp(options: ServeAppOptions): Promise<Result<AppServ
   const code = randomBytes(32).toString('base64url')
   let handle: (request: Request) => Response | Promise<Response> = () => new Response(null, { status: 503 })
 
-  const served = Result.try({
-    try: () => Bun.serve({ hostname: '127.0.0.1', port: options.port ?? 0, fetch: request => handle(request) }),
+  const served = await Result.tryPromise({
+    try: () =>
+      serve({
+        hostname: '127.0.0.1',
+        port: options.port ?? 0,
+        silent: true,
+        gracefulShutdown: false,
+        fetch: request => handle(request),
+      }).ready(),
     catch: cause => new ServeError({ message: `Could not listen on 127.0.0.1: ${cause instanceof Error ? cause.message : String(cause)}`, cause }),
   })
   if (served.isErr()) return served
   const server = served.value
-  const host = `127.0.0.1:${server.port}`
+  const host = `127.0.0.1:${new URL(server.url!).port}`
   const api = createApi({ ...options, host, token, signal })
   const page = uiHandler(ui.value)
   const session = sessionRoute({ host, code, token })
@@ -68,7 +78,7 @@ export async function serveApp(options: ServeAppOptions): Promise<Result<AppServ
     url: `http://${host}/#code=${code}`,
     stop: async () => {
       stopped.abort()
-      await server.stop(true)
+      await server.close(true)
     },
   })
 }
@@ -76,13 +86,15 @@ export async function serveApp(options: ServeAppOptions): Promise<Result<AppServ
 /**
  * Loads the UI that `pnpm build:ui` bundled into one HTML file.
  *
- * The import is dynamic so that a checkout without a built UI can still run
- * the CLI and `ui --dev-server`; `bun build --compile` embeds the file all the
- * same, because the specifier is a literal.
+ * A bundled build ships it as `ui/index.html` next to the bundle; a checkout
+ * reads it from `www/dist`, so one without a built UI can still run the CLI
+ * and `ui --dev-server`.
  */
 async function embeddedPage(): Promise<Result<UiSource, UiNotBuiltError>> {
+  const bundled = new URL('ui/index.html', import.meta.url)
+  const file = existsSync(bundled) ? bundled : new URL('../www/dist/index.html', import.meta.url)
   return Result.tryPromise({
-    try: async () => ({ page: (await import('../www/dist/index.html', { with: { type: 'text' } })).default as unknown as string }),
+    try: async () => ({ page: await readFile(file, 'utf8') }),
     catch: () =>
       new UiNotBuiltError({ message: 'The UI has not been built; run `pnpm build:ui`, or pass --dev-server' }),
   })

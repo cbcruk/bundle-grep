@@ -5,6 +5,7 @@
  */
 
 import { Result } from 'better-result'
+import { spawnSync } from 'node:child_process'
 import { tmpdir } from 'node:os'
 
 /**
@@ -35,7 +36,7 @@ export function batchSshEnv(
  */
 export function hasSshCommandConfig(): boolean {
   const config = Result.try(() =>
-    Bun.spawnSync(['git', 'config', '--get', 'core.sshCommand'], { cwd: tmpdir(), env: process.env, stdout: 'pipe', stderr: 'ignore' }),
+    spawnSync('git', ['config', '--get', 'core.sshCommand'], { cwd: tmpdir(), env: process.env, stdio: ['ignore', 'pipe', 'ignore'], encoding: 'utf8' }),
   )
-  return config.isOk() && config.value.exitCode === 0 && config.value.stdout.toString().trim() !== ''
+  return config.isOk() && config.value.status === 0 && config.value.stdout.trim() !== ''
 }

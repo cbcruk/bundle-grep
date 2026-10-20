@@ -1,4 +1,11 @@
-(function_declaration name: (identifier) @name) @definition.function
+/**
+ * The tags query for JavaScript, TypeScript and TSX, shared.
+ *
+ * @module
+ */
+
+/** The query source, in tree-sitter's query language. */
+export const query: string = String.raw`(function_declaration name: (identifier) @name) @definition.function
 (generator_function_declaration name: (identifier) @name) @definition.function
 (class_declaration name: (_) @name) @definition.class
 ((method_definition name: [(property_identifier) (private_property_identifier)] @name) @definition.method
@@ -11,3 +18,4 @@
 (pair key: (property_identifier) @name value: [(arrow_function) (function_expression)]) @definition.function
 (program (lexical_declaration kind: "const" (variable_declarator name: (identifier) @name) @definition.constant))
 (program (export_statement declaration: (lexical_declaration kind: "const" (variable_declarator name: (identifier) @name) @definition.constant)))
+`

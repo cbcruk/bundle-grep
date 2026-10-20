@@ -1,14 +1,26 @@
 {
-  "name": "@bundle-grep/cli",
+  "name": "bundle-grep",
   "version": "0.1.0",
-  "private": true,
+  "description": "Archive git repositories as bundles and search them with GitHub code search syntax, locally.",
+  "license": "UNLICENSED",
   "type": "module",
   "bin": {
-    "bundle-grep": "./src/main.ts"
+    "bundle-grep": "./dist/main.mjs"
   },
-  "dependencies": {
+  "files": [
+    "dist"
+  ],
+  "engines": {
+    "node": ">=24"
+  },
+  "scripts": {
+    "build": "tsdown",
+    "prepack": "tsdown"
+  },
+  "devDependencies": {
     "@bundle-grep/core": "workspace:*",
     "@bundle-grep/desktop": "workspace:*",
-    "better-result": "^3.0.1"
+    "better-result": "^3.0.1",
+    "string-width": "8.3.0"
   }
 }

@@ -4,13 +4,16 @@
  *
  * Only what `language:` needs is kept: each language's aliases, extensions,
  * and exact filenames, plus `popular.yml`'s list, which breaks ties between
- * languages sharing an extension. Run with `bun scripts/generate-languages.ts [ref]`,
+ * languages sharing an extension. Run with `pnpm exec tsx scripts/generate-languages.ts [ref]`,
  * where `ref` is a Linguist tag or commit and defaults to `main`.
  *
  * @module
  */
 
+import { writeFile } from 'node:fs/promises'
 import { join } from 'node:path'
+
+import { parse } from 'yaml'
 
 interface LinguistLanguage {
   aliases?: string[]
@@ -28,7 +31,7 @@ async function fetchYaml(url: string): Promise<unknown> {
     console.error(`Could not fetch ${url}: ${response.status}`)
     process.exit(1)
   }
-  return Bun.YAML.parse(await response.text())
+  return parse(await response.text())
 }
 
 const parsed = (await fetchYaml(source)) as Record<string, LinguistLanguage>
@@ -46,6 +49,6 @@ const languages = Object.fromEntries(
     ]),
 )
 
-const target = join(import.meta.dir, '..', 'packages/core/src/plan/languages.generated.json')
-await Bun.write(target, `${JSON.stringify({ source, popular, languages }, null, 1)}\n`)
+const target = join(import.meta.dirname, '..', 'packages/core/src/plan/languages.generated.json')
+await writeFile(target, `${JSON.stringify({ source, popular, languages }, null, 1)}\n`)
 console.log(`${Object.keys(languages).length} languages written to ${target}`)

@@ -1,4 +1,4 @@
-import { describe, expect, test } from 'bun:test'
+import { describe, expect, test } from 'vitest'
 
 import { applySuggestion, suggest, wordAt } from '../../www/src/lib/complete'
 

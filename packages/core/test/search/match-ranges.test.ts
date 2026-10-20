@@ -1,4 +1,4 @@
-import { describe, expect, test } from 'bun:test'
+import { describe, expect, test } from 'vitest'
 
 import { byteColumnToIndex, createHighlighter } from '../../src/search/match-ranges'
 

@@ -1,4 +1,4 @@
-import { describe, expect, test } from 'bun:test'
+import { describe, expect, test } from 'vitest'
 
 import type { LoggedCommit } from '../../src/search/history.types'
 import { createNameLogParser, diffPath, parseNameLog, parsePatchLog } from '../../src/search/parse-log'

@@ -1,17 +1,19 @@
-import { afterAll, beforeAll, describe, expect, test } from 'bun:test'
+import { afterAll, beforeAll, describe, expect, test } from 'vitest'
 import { existsSync, mkdtempSync, rmSync } from 'node:fs'
+import { get } from 'node:http'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 
 import type { ArchiveLayout } from '@bundle-grep/core'
 
+import { listen, type Listening } from '../../../packages/core/test/listen'
 import { TOKEN_HEADER } from '../src/api/guard'
 import type { AppServer } from '../src/desktop.types'
 import { serveApp } from '../src/serve-app'
 
 let root: string
 let layout: ArchiveLayout
-let dev: ReturnType<typeof Bun.serve>
+let dev: Listening
 let app: AppServer
 let base: string
 let code: string
@@ -21,19 +23,26 @@ function redeem(origin: string, given: string, headers: Record<string, string> =
   return fetch(`${origin}/api/session`, { method: 'POST', headers, body: JSON.stringify({ code: given }) })
 }
 
+/** Requests a path with headers `fetch` will not send as given, such as `Host`. */
+function statusFor(path: string, headers: Record<string, string>): Promise<number | undefined> {
+  return new Promise((resolve, reject) => {
+    const url = new URL(path, base)
+    get({ hostname: url.hostname, port: url.port, path: url.pathname, headers }, response => {
+      response.resume()
+      resolve(response.statusCode)
+    }).on('error', reject)
+  })
+}
+
 beforeAll(async () => {
   root = mkdtempSync(join(tmpdir(), 'bundle-grep-serve-'))
   layout = { archiveDir: join(root, 'archive'), cacheDir: join(root, 'cache') }
-  dev = Bun.serve({
-    hostname: '127.0.0.1',
-    port: 0,
-    fetch: request => {
-      const url = new URL(request.url)
-      if (url.pathname === '/redirect') return Response.redirect('/elsewhere', 302)
-      return Response.json({ path: `${url.pathname}${url.search}`, host: request.headers.get('host') })
-    },
+  dev = await listen(request => {
+    const url = new URL(request.url)
+    if (url.pathname === '/redirect') return Response.redirect(new URL('/elsewhere', url), 302)
+    return Response.json({ path: `${url.pathname}${url.search}`, host: request.headers.get('host') })
   })
-  app = (await serveApp({ layout, root, devServer: `http://127.0.0.1:${dev.port}` })).unwrap()
+  app = (await serveApp({ layout, root, devServer: dev.origin })).unwrap()
   const url = new URL(app.url)
   base = url.origin
   code = url.hash.replace(/^#code=/, '')
@@ -42,7 +51,7 @@ beforeAll(async () => {
 
 afterAll(async () => {
   await app.stop()
-  await dev.stop(true)
+  await dev.close()
   rmSync(root, { recursive: true, force: true })
 })
 
@@ -54,7 +63,7 @@ describe('serveApp', () => {
   })
 
   test('the code is traded for the token once, and only from the server\'s own origin', async () => {
-    const other = (await serveApp({ layout, root, devServer: `http://127.0.0.1:${dev.port}` })).unwrap()
+    const other = (await serveApp({ layout, root, devServer: dev.origin })).unwrap()
     try {
       const origin = new URL(other.url).origin
       const fresh = new URL(other.url).hash.replace(/^#code=/, '')
@@ -88,22 +97,21 @@ describe('serveApp', () => {
   })
 
   test('a path that looks like another host stays on the dev server', async () => {
-    using outside = Bun.serve({ hostname: '127.0.0.1', port: 0, fetch: () => new Response('outside') })
+    await using outside = await listen(() => new Response('outside'))
     const response = await fetch(`${base}//127.0.0.1:${outside.port}/payload`)
     expect(await response.json()).toMatchObject({ host: `127.0.0.1:${dev.port}` })
   })
 
   test('a request for another host is refused, UI included', async () => {
     for (const path of ['/', '/api/settings']) {
-      const response = await fetch(`${base}${path}`, { headers: { host: 'evil.example', [TOKEN_HEADER]: token } })
-      expect(response.status).toBe(403)
+      expect(await statusFor(path, { host: 'evil.example', [TOKEN_HEADER]: token })).toBe(403)
     }
   })
 
   test('a dev server that does not answer is a 502', async () => {
-    const down = Bun.serve({ hostname: '127.0.0.1', port: 0, fetch: () => new Response() })
-    const origin = `http://127.0.0.1:${down.port}`
-    await down.stop(true)
+    const down = await listen(() => new Response())
+    const origin = down.origin
+    await down.close()
     const orphan = (await serveApp({ layout, root, devServer: origin })).unwrap()
     try {
       expect((await fetch(new URL(orphan.url).origin)).status).toBe(502)
@@ -113,11 +121,11 @@ describe('serveApp', () => {
   })
 
   test('a port in use is a ServeError', async () => {
-    const taken = await serveApp({ layout, root, devServer: `http://127.0.0.1:${dev.port}`, port: Number(new URL(base).port) })
+    const taken = await serveApp({ layout, root, devServer: dev.origin, port: Number(new URL(base).port) })
     expect(taken.isErr() && taken.error._tag).toBe('ServeError')
   })
 
-  test.skipIf(!existsSync(join(import.meta.dir, '../www/dist/index.html')))('serves the built UI at / only', async () => {
+  test.skipIf(!existsSync(join(import.meta.dirname, '../www/dist/index.html')))('serves the built UI at / only', async () => {
     const built = (await serveApp({ layout, root })).unwrap()
     try {
       const origin = new URL(built.url).origin
@@ -132,7 +140,7 @@ describe('serveApp', () => {
   })
 
   test('stop closes the server', async () => {
-    const other = (await serveApp({ layout, root, devServer: `http://127.0.0.1:${dev.port}` })).unwrap()
+    const other = (await serveApp({ layout, root, devServer: dev.origin })).unwrap()
     await other.stop()
     await expect(fetch(new URL(other.url).origin)).rejects.toThrow()
   })

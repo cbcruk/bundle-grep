@@ -6,7 +6,7 @@
  * count larger than the directory holds reuses the repositories under new
  * names, which costs git the same work again but no disk space. Each query
  * runs once to warm the page cache and git's own caches, then `--runs` times;
- * the median is reported. Run with `bun scripts/bench.ts --dir <dir>`.
+ * the median is reported. Run with `pnpm bench --dir <dir>`.
  *
  * @module
  */
@@ -43,7 +43,7 @@ const { values } = parseArgs({
     query: { type: 'string', multiple: true },
   },
 })
-if (!values.dir) throw new Error('Usage: bun scripts/bench.ts --dir <dir of bare repos> [--counts 10,100,500] [--runs 3] [--query q]...')
+if (!values.dir) throw new Error('Usage: pnpm bench --dir <dir of bare repos> [--counts 10,100,500] [--runs 3] [--query q]...')
 
 const dir = values.dir
 const available = readdirSync(dir)

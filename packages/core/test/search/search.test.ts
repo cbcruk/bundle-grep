@@ -1,4 +1,4 @@
-import { afterAll, beforeAll, describe, expect, test } from 'bun:test'
+import { afterAll, beforeAll, describe, expect, test } from 'vitest'
 import { existsSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
@@ -183,7 +183,7 @@ describe('search edge cases', () => {
     const run = async (): Promise<void> => {
       for await (const event of search({ plan, repos, holds: () => { throw new Error('boom') } })) events.push(event)
     }
-    expect(run()).rejects.toThrow('boom')
+    await expect(run()).rejects.toThrow('boom')
     await run().catch(() => undefined)
     expect(events.some(event => event.type === 'done')).toBe(false)
   })

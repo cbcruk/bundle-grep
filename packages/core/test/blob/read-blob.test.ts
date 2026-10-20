@@ -1,4 +1,4 @@
-import { afterAll, beforeAll, describe, expect, test } from 'bun:test'
+import { afterAll, beforeAll, describe, expect, test } from 'vitest'
 import { join } from 'node:path'
 
 import { readBlob } from '../../src/blob/read-blob'

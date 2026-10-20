@@ -9,8 +9,9 @@ import type { NdjsonResponseOptions } from '../desktop.types'
 /**
  * How long a stream may go quiet before a heartbeat line is sent, in milliseconds.
  *
- * Bun closes a connection that sends nothing for 10 seconds, and a regex over
- * a large archive, or a fetch of a large repository, can take longer than that.
+ * Servers and proxies may close a connection that sends nothing for a while,
+ * and a regex over a large archive, or a fetch of a large repository, can
+ * take longer than that between events.
  */
 export const DEFAULT_HEARTBEAT_MS = 5000
 
