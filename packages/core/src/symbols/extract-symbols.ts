@@ -91,19 +91,26 @@ function writtenScopes(name: Node): string[] {
 /**
  * Names each definition after the definitions around it, its own `@scope`, and the scopes written before its name.
  *
- * Only the nearest enclosing definition counts, and only when it is a
- * container: a function inside a method is local to it, not a member of the
- * class. Outside any definition, a C# file-scoped namespace before it counts.
+ * The nearest enclosing container counts, unless a function or method comes
+ * first: a definition inside a method is local to it, not a member of the
+ * class. A C or C++ function's body counts as inside it, though the
+ * definition captured is only its declarator. Outside any definition, a C# file-scoped namespace before it counts.
  */
 function qualify(found: readonly Found[], separator: string): Map<Found, string> {
   const byNode = new Map<number, Found>()
-  for (const entry of found) byNode.set(entry.definition.id, entry)
+  for (const entry of found) {
+    byNode.set(entry.definition.id, entry)
+    const { parent } = entry.definition
+    if (entry.definition.type === 'function_declarator' && parent?.type === 'function_definition') byNode.set(parent.id, entry)
+  }
   const fileScoped = found.find(entry => entry.definition.type === FILE_SCOPED)
   const qualified = new Map<Found, string>()
   const enclosing = (entry: Found): Found | null | undefined => {
     for (let parent = entry.definition.parent; parent; parent = parent.parent) {
       const around = byNode.get(parent.id)
-      if (around && around !== entry) return CONTAINERS.has(around.kind) ? around : null
+      if (!around || around === entry) continue
+      if (CONTAINERS.has(around.kind)) return around
+      if (around.kind === 'function' || around.kind === 'method') return null
     }
     return undefined
   }
