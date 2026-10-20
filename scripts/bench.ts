@@ -30,7 +30,7 @@ const DEFAULT_QUERIES = [
 
 interface Timing {
   ms: number
-  files: number
+  found: string
 }
 
 const { values } = parseArgs({
@@ -65,11 +65,11 @@ function reposFor(count: number): SearchRepo[] {
 async function time(query: string, repos: SearchRepo[]): Promise<Timing> {
   const plan = parseQuery(query).andThen(compileQuery).unwrap()
   const start = performance.now()
-  let files = 0
+  let found = ''
   for await (const event of search({ plan, repos, holds: () => true, limit, ...(concurrency ? { concurrency } : {}) })) {
-    if (event.type === 'done') files = event.totalCommits ?? event.totalFiles
+    if (event.type === 'done') found = `${event.totalCommits ?? event.totalFiles}${event.capped ? '+' : ''}`
   }
-  return { ms: performance.now() - start, files }
+  return { ms: performance.now() - start, found }
 }
 
 function median(numbers: number[]): number {
@@ -86,7 +86,7 @@ for (const query of queries) {
     await time(query, repos)
     const timings: Timing[] = []
     for (let run = 0; run < runs; run++) timings.push(await time(query, repos))
-    cells.push(`${median(timings.map(timing => timing.ms)).toFixed(0)} ms (${timings[0]!.files})`)
+    cells.push(`${median(timings.map(timing => timing.ms)).toFixed(0)} ms (${timings[0]!.found})`)
   }
   console.log([query, ...cells].join('\t'))
 }

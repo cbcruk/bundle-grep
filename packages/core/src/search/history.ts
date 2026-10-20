@@ -46,7 +46,9 @@ function logArgs(history: HistoryPattern): string[] {
  * keeps are dropped. Merges are left out, as `git log` shows them without a
  * diff. Git diffs every commit it walks past, so it is stopped as soon as
  * `max` commits were kept, or `enough` is aborted, rather than left to walk
- * the whole history.
+ * the whole history. A commit counts once its output so far ends between
+ * two names, as git writes each commit whole, rather than when the next
+ * commit begins; names that arrive later are still added to it.
  *
  * @returns The commits and whether that was all of them, or the
  * {@linkcode GitError} of running git.
@@ -56,25 +58,35 @@ export async function matchingCommits(options: MatchingCommitsOptions): Promise<
   const commits: LoggedCommit[] = []
   const full = new AbortController()
   const enough = options.enough ? AbortSignal.any([full.signal, options.enough]) : full.signal
-  const parser = createNameLogParser(commit => {
+  const kept = new Map<string, LoggedCommit>()
+  const consider = (commit: LoggedCommit): void => {
     const files = commit.files.filter(path => matchesPath(expr, path))
-    if (files.length && commits.length < max && !enough.aborted) {
-      const kept = { sha: commit.sha, files }
-      commits.push(kept)
-      onCommit?.(kept)
+    const known = kept.get(commit.sha)
+    if (known) {
+      known.files = files
+    } else if (files.length && commits.length < max && !enough.aborted) {
+      const keep = { sha: commit.sha, files }
+      kept.set(commit.sha, keep)
+      commits.push(keep)
+      onCommit?.(keep)
     }
     if (commits.length >= max) full.abort()
-  })
+  }
+  const parser = createNameLogParser(consider)
   const decoder = new TextDecoder()
   const args = [...logArgs(history), '--format=%x1e%H', '--name-only', '-z', ref, '--', ...narrowingPathspecs(expr)]
   const result = await runGit(args, {
     cwd: gitDir,
     signal: AbortSignal.any([signal, enough]),
     onStdout: chunk => {
-      if (!enough.aborted) parser.push(decoder.decode(chunk, { stream: true }))
+      if (enough.aborted) return
+      parser.push(decoder.decode(chunk, { stream: true }))
+      const open = parser.open()
+      if (open) consider(open)
     },
   })
-  if (enough.aborted && !signal.aborted) return Result.ok({ commits, complete: false })
+  const stopped = result.isOk() || result.error.exitCode === null
+  if (enough.aborted && !signal.aborted && stopped) return Result.ok({ commits, complete: false })
   if (result.isErr()) return result
   parser.push(decoder.decode())
   parser.end()

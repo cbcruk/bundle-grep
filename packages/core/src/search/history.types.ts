@@ -17,6 +17,8 @@ export interface LoggedCommit {
 
 /** Reads the first pass's output in chunks, from {@linkcode createNameLogParser}. */
 export interface NameLogParser {
+  /** The commit still being read, with the names so far, when the output so far ends between two fields. */
+  open: () => LoggedCommit | undefined
   /** Reads the next chunk of output. */
   push: (text: string) => void
   /** Hands over the last commit once the output has ended. */
@@ -27,7 +29,7 @@ export interface NameLogParser {
 export interface MatchingCommits {
   /** The commits found, newest first, at most {@linkcode MatchingCommitsOptions.max}. */
   commits: LoggedCommit[]
-  /** `false` when `max` commits were found, so more may match. */
+  /** `false` when the walk stopped early, at `max` commits or when `enough` was aborted, so more may match. */
   complete: boolean
 }
 

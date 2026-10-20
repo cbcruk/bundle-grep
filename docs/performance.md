@@ -12,8 +12,8 @@ backend is worth adding. Measured for issue #13; rerun with `pnpm bench`.
 - 500 repositories reuse the 117 under new names. Git does the same work again,
   but the page cache is shared, so every number here is warm-cache.
 - Each cell is the median of 3 runs after a warm-up, with `--limit 100`, from
-  `search()` to its `done` event. The count of matching files, or commits for
-  `history:`, is in parentheses.
+  `search()` to its `done` event. `pnpm bench` also prints the count of
+  matching files, or commits for `history:`, with a `+` when it is capped.
 
 ```sh
 pnpm bench --dir <directory of bare repositories> [--counts 10,100,500] [--runs 3] [--query q]...
@@ -67,12 +67,17 @@ Every query except `history:` matched the same files before and after.
 - **Text check only where needed.** The universe is now the regular files from
   `ls-tree`. Files found by a `grep` or `symbol:` leaf are known to be text.
   Only the remaining matches, such as what a `path:` selected, are checked: by
-  name when there are at most 1,000 of them, by one whole-tree read otherwise.
+  name when there are at most 1,000 of them, by one whole-tree read otherwise
+  or when a name is not valid UTF-8. An expression with a `NOT` starts that
+  read at once, alongside the rest, as before #13. A `path:` that selects
+  more than 1,000 files now reads the tree after `ls-tree` rather than
+  alongside it, about 20 ms slower on PebbleOS.
 - **`history:` stops early.** Pass 1 streams, and git is stopped once more
   commits than the limit were found across repositories; repositories not yet
-  started are skipped. `done.capped` then marks the totals as lower bounds,
+  started are skipped. A history whose matches run out before that is still
+  walked to its root. `done.capped` then marks the totals as lower bounds,
   shown as `100+ commits`.
-- **Default concurrency** is the number of CPUs, at most 8, up from 4.
+- **Default concurrency** is the number of CPUs, from 4 to 8, up from 4.
 
 ## Alternatives
 

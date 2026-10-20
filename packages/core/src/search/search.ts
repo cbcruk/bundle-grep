@@ -9,6 +9,7 @@ import { availableParallelism } from 'node:os'
 
 import { GitError } from '../git/git.errors'
 import { isEmptyRepo } from '../git/is-empty-repo'
+import { literalPathspecChunks } from '../git/literal-pathspecs'
 import { resolveCommit } from '../git/resolve-commit'
 import { runGit } from '../git/run-git'
 import { grepArgs } from '../plan/grep-args'
@@ -35,13 +36,6 @@ import type {
 } from './search.types'
 
 /**
- * Most bytes of `:(literal)` pathspecs to put on one command line; beyond it,
- * line extraction greps the whole tree and filters instead. Kept well under
- * Windows' 32 KiB limit, the smallest of the platforms git runs on.
- */
-const MAX_PATHSPEC_BYTES = 24 * 1024
-
-/**
  * Tells a git built without PCRE apart from other git failures.
  *
  * @returns A {@linkcode PcreUnavailableError} when git's message says PCRE is
@@ -65,10 +59,10 @@ function engineGroups(patterns: readonly Pattern[]): GrepLeaf[] {
   ]
 }
 
+/** Names the files on one command line, or none when they do not fit, so the whole tree is grepped and filtered instead. */
 function literalPathspecs(files: readonly string[]): string[] {
-  const pathspecs = files.map(path => `:(literal)${path}`)
-  const bytes = pathspecs.reduce((total, pathspec) => total + Buffer.byteLength(pathspec) + 1, 0)
-  return bytes <= MAX_PATHSPEC_BYTES ? pathspecs : []
+  const chunks = literalPathspecChunks(files)
+  return chunks.length === 1 ? chunks[0]! : []
 }
 
 /**
@@ -189,7 +183,7 @@ export async function* search<Repo extends SearchRepo>(
 ): AsyncGenerator<SearchEvent, void, undefined> {
   const { plan, repos, holds, context = 0, maxMatchesPerFile = 20 } = options
   const limit = Math.max(0, options.limit ?? 100)
-  const concurrency = Math.max(1, options.concurrency ?? Math.min(8, availableParallelism()))
+  const concurrency = Math.max(1, options.concurrency ?? Math.max(4, Math.min(8, availableParallelism())))
 
   const finished = new AbortController()
   const timeout = options.timeoutMs === undefined ? undefined : AbortSignal.timeout(options.timeoutMs)
@@ -229,6 +223,7 @@ export async function* search<Repo extends SearchRepo>(
       capped = true
       return
     }
+    let mine = 0
     const found = await matchingCommits({
       gitDir: repo.gitDir,
       ref,
@@ -237,12 +232,16 @@ export async function* search<Repo extends SearchRepo>(
       max: limit + 1,
       enough: historyFull.signal,
       onCommit: () => {
+        mine++
         if (++historyFound > limit) historyFull.abort()
       },
       signal: stop,
     })
     if (stop.aborted) return
-    if (found.isErr()) return failed(repo, found.error)
+    if (found.isErr()) {
+      historyFound -= mine
+      return failed(repo, found.error)
+    }
     if (!found.value.complete) capped = true
     const counted = found.value.commits.slice(0, Math.max(1, limit))
 
@@ -250,7 +249,10 @@ export async function* search<Repo extends SearchRepo>(
     reserved += shown.length
     const described = await describeCommits({ gitDir: repo.gitDir, commits: shown, history, maxMatchesPerFile, signal: stop })
     if (stop.aborted) return
-    if (described.isErr()) return lost(repo, shown.length, described.error)
+    if (described.isErr()) {
+      historyFound -= mine
+      return lost(repo, shown.length, described.error)
+    }
 
     for (const commit of counted) {
       totalCommits++
