@@ -199,6 +199,23 @@ describe('qualified names', () => {
     expect(qualified('csharp', 'namespace A.B { class C { void M() {} } }')).toEqual(['A.B', 'A.B.C', 'A.B.C.M'])
   })
 
+  test('definitions local to a function are not members of the class around it', () => {
+    expect(qualified('python', 'class A:\n  def m(self):\n    def inner(): pass\n')).toEqual(['A', 'A.m', 'inner'])
+    expect(qualified('typescript', 'class O { m() { function local() {} class In { n() {} } return { h: () => 1 } } }')).toEqual([
+      'O',
+      'O.m',
+      'local',
+      'In',
+      'In.n',
+      'h',
+    ])
+    expect(qualified('java', 'class A { void m() { new Runnable() { public void run() {} }; } }')).toEqual(['A', 'A.m', 'run'])
+  })
+
+  test('a C# file-scoped namespace names the declarations after it', () => {
+    expect(qualified('csharp', 'namespace N.M;\nclass A { void m() {} }')).toEqual(['N.M', 'N.M.A', 'N.M.A.m'])
+  })
+
   test('Go methods are named after their receiver, and Rust ones after their impl', () => {
     expect(qualified('go', 'package p\nfunc (m *Maint) deleteRows() {}\nfunc (s Set[T]) Add(v T) {}\nfunc Top() {}\n')).toEqual([
       'Maint.deleteRows',
@@ -212,6 +229,14 @@ describe('qualified names', () => {
       'T',
       'T::d',
     ])
+    const impls = [
+      "impl<'a> Display for &'a Foo { fn fmt() {} }",
+      "impl Foo for &'static str { fn a() {} }",
+      'impl<T> Foo for *const T { fn b() {} }',
+      'impl dyn Trait { fn c() {} }',
+      'impl crate::x::Bar { fn d() {} }',
+    ]
+    expect(qualified('rust', impls.join('\n'))).toEqual(['Foo::fmt', 'str::a', 'T::b', 'Trait::c', 'x::Bar::d'])
   })
 
   test('scopes written before a name count, at any depth', () => {
