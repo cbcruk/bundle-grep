@@ -138,7 +138,7 @@ describe('telling text from binary files', () => {
     files['many/blob.bin'] = '\u0000'
     using many = createFixtureRepo([{ message: 'many', files }])
     const dir = join(many.root, 'repo.git')
-    runGit(many.root, ['clone', '--quiet', '--bare', many.repo, dir])
+    runGit(many.root, ['clone', '--quiet', '--bare', many.bundle, dir])
     const list = async (query: string): Promise<string[]> => {
       const plan = parseQuery(query).andThen(compileQuery).unwrap()
       return (await listMatchingFiles({ gitDir: dir, expr: specializePlan(plan.expr, () => true) })).unwrap()
@@ -163,7 +163,7 @@ describe('telling text from binary files, as git does', () => {
   test('a name that is not valid UTF-8 is still found by path:, NOT, and language:', async () => {
     using odd = createFixtureRepo([{ message: 'init', files: { 'ok.txt': 'hello\n' } }])
     const dir = join(odd.root, 'repo.git')
-    runGit(odd.root, ['clone', '--quiet', '--bare', odd.repo, dir])
+    runGit(odd.root, ['clone', '--quiet', '--bare', odd.bundle, dir])
     const git = (args: string[], input?: string | Buffer): string =>
       execFileSync('git', args, { cwd: dir, env: { ...process.env, ...IDENTITY }, input }).toString().trim()
     const oid = git(['hash-object', '-w', '--stdin'], 'hello\n')
