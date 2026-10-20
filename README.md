@@ -50,25 +50,56 @@ JSON array and the other commands one JSON object per line.
 ### Keeping the archive current
 
 `sync` syncs 8 repositories at a time (`--concurrency`), or one at a time for
-ssh URLs at a terminal, so that ssh prompts do not interleave. Before fetching
+ssh URLs at a terminal, so that ssh prompts do not interleave. An https URL
+that git rewrites to ssh through `url.<base>.insteadOf` still counts as https,
+so pass `--concurrency 1` if ssh may prompt then. Before fetching
 a repository it lists the remote's branches and tags, and it skips the fetch
 when the cache already holds exactly those, so rerunning `sync` over an
-unchanged account costs one round trip per repository. A sync locks each
-repository it updates, and a second sync of the same repository fails rather
-than racing it, so overlapping scheduled runs are safe.
+unchanged account costs one round trip per repository. `sync` and `restore`
+lock each repository they update, and a second run on the same repository
+fails for it rather than racing, so overlapping scheduled runs are safe. A
+lock left by a run that was killed, or from before a reboot, is taken over.
 
-To run it on a schedule, give the scheduler a binary on an absolute path and a
-`gh` it can find. With cron, for example, every night at 3:00:
+To run it on a schedule, give the scheduler the binary's absolute path and a
+`PATH` where it finds `git` and `gh`. On macOS, use a launchd agent: `gh`
+keeps its token in the login keychain, which cron jobs may not be able to
+read. Save this as `~/Library/LaunchAgents/com.example.bundle-grep.plist`,
+with your own paths and source, and load it with
+`launchctl bootstrap gui/$(id -u) ~/Library/LaunchAgents/com.example.bundle-grep.plist`:
 
-```cron
-0 3 * * * PATH=/opt/homebrew/bin:/usr/bin:/bin $HOME/.local/bin/bundle-grep sync cbcruk --json >> $HOME/.bundle-grep/sync.log 2>&1
+```xml
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <key>Label</key><string>com.example.bundle-grep</string>
+  <key>ProgramArguments</key>
+  <array>
+    <string>/Users/you/.local/bin/bundle-grep</string>
+    <string>sync</string>
+    <string>cbcruk</string>
+    <string>--json</string>
+  </array>
+  <key>EnvironmentVariables</key>
+  <dict><key>PATH</key><string>/opt/homebrew/bin:/usr/bin:/bin</string></dict>
+  <key>StartCalendarInterval</key>
+  <dict><key>Hour</key><integer>3</integer><key>Minute</key><integer>0</integer></dict>
+  <key>StandardOutPath</key><string>/Users/you/.bundle-grep/sync.log</string>
+  <key>StandardErrorPath</key><string>/Users/you/.bundle-grep/sync.log</string>
+</dict>
+</plist>
 ```
 
-On macOS, a launchd agent in `~/Library/LaunchAgents` runs
-`bundle-grep sync <source> --json` the same way, with
-`StartCalendarInterval` for the time. Nobody is at the terminal then, so ssh
-runs in batch mode and fails rather than prompting. The exit code is 1 when
-some repository failed, and each failure is a `failed` line in the log.
+On Linux, a cron line does the same, here every night at 3:00:
+
+```cron
+0 3 * * * PATH=/usr/local/bin:/usr/bin:/bin $HOME/.local/bin/bundle-grep sync cbcruk --json >> $HOME/.bundle-grep/sync.log 2>&1
+```
+
+Nobody is at the terminal then, so unless `GIT_SSH_COMMAND`, `GIT_SSH` or
+`core.sshCommand` chooses an ssh command, ssh runs in batch mode and fails
+rather than prompting. The exit code is 1 when some repository failed, and
+each failure is a `failed` line in the log.
 
 ### Query syntax
 

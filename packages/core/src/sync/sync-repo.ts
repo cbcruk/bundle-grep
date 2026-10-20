@@ -14,12 +14,12 @@ import { archivePaths } from '../archive/archive-paths'
 import type { ArchivePaths, RepoMetadata } from '../archive/archive.types'
 import { fileSystem } from '../archive/file-system'
 import { readMetadata, writeMetadata } from '../archive/metadata'
+import { acquireRepoLock } from '../archive/repo-lock'
 import type { GitError } from '../git/git.errors'
 import type { GitOutput } from '../git/git.types'
 import { branchesOf, chooseHead, parseRemoteRefs, refsDigest } from '../git/refs'
 import { runGit } from '../git/run-git'
 import { symbolIndex } from '../symbols/symbol-index'
-import { acquireSyncLock } from './sync-lock'
 import type { SyncError, SyncEvent, SyncOptions, SyncOutcome, SyncReposOptions, SyncStatus, SyncTarget } from './sync.types'
 
 /** How old a leftover temporary bundle must be before it counts as abandoned. */
@@ -63,8 +63,8 @@ function withoutCredentials(url: string): string {
  * {@linkcode symbolIndex}; if that fails, the next search builds it.
  *
  * While it runs, the sync holds the lock file `cacheDir/<owner>/<name>.git.lock`;
- * a second sync of the same repository fails with
- * {@linkcode SyncLockedError} instead of racing the first.
+ * a second sync or a restore of the same repository fails with
+ * {@linkcode RepoLockedError} instead of racing the first.
  *
  * For `https://github.com/` URLs, git can fall back to `gh` for credentials,
  * replacing the user's own helpers for github.com, so private repositories
@@ -93,7 +93,7 @@ export function syncRepo(target: SyncTarget, options: SyncOptions): Promise<Resu
     const git = (args: string[], allowExitCodes?: number[]): Promise<Result<GitOutput, GitError>> =>
       runGit(args, { cwd: paths.gitDir, env: { ...options.env, GIT_TERMINAL_PROMPT: '0' }, signal: options.signal, allowExitCodes })
 
-    await using _lock = yield* Result.await(acquireSyncLock(`${paths.gitDir}.lock`))
+    await using _lock = yield* Result.await(acquireRepoLock(`${paths.gitDir}.lock`))
     yield* Result.await(fileSystem(paths.gitDir, () => mkdir(paths.gitDir, { recursive: true })))
     yield* Result.await(git(['init', '--quiet', '--bare', '.']))
     const remote = parseRemoteRefs((yield* Result.await(git([...credentials, 'ls-remote', '--symref', '--', url]))).stdout.toString('utf8'))
@@ -225,18 +225,22 @@ export const DEFAULT_SYNC_CONCURRENCY = 8
 /**
  * Syncs repositories, several at a time, yielding each one's outcome in the order given.
  *
- * Up to {@linkcode SyncReposOptions.concurrency} repositories sync at once,
- * and an outcome is yielded once every repository before it has been. A
- * repository that fails yields a `failed` event and the rest carry on.
- * Aborting {@linkcode SyncOptions.signal} starts no more repositories; those
- * in progress fail, and their events are still yielded.
+ * The targets are read up front. Up to
+ * {@linkcode SyncReposOptions.concurrency} repositories sync at once, and an
+ * outcome is yielded once every repository before it has been. A repository
+ * that fails yields a `failed` event and the rest carry on. Aborting
+ * {@linkcode SyncOptions.signal} starts no more repositories; those in
+ * progress fail, and their events are still yielded. Leaving the loop early
+ * also starts no more, and waits for those in progress to finish.
  */
 export async function* syncRepos(
   targets: Iterable<SyncTarget>,
   options: SyncReposOptions,
 ): AsyncGenerator<SyncEvent, void, undefined> {
   const queue = [...targets]
-  const concurrency = Math.max(1, options.concurrency ?? DEFAULT_SYNC_CONCURRENCY)
+  const requested = options.concurrency ?? DEFAULT_SYNC_CONCURRENCY
+  const concurrency = Number.isFinite(requested) ? Math.max(1, Math.floor(requested)) : DEFAULT_SYNC_CONCURRENCY
+  let stopped = false
   const events: Promise<SyncEvent>[] = []
   let started = 0
   let running = 0
@@ -255,18 +259,25 @@ export async function* syncRepos(
     }
   }
   const start = (): void => {
-    while (running < concurrency && started < queue.length && !options.signal?.aborted) {
+    while (!stopped && running < concurrency && started < queue.length && !options.signal?.aborted) {
       running++
-      events.push(run(queue[started++]!))
+      const event = run(queue[started++]!)
+      event.catch(() => undefined)
+      events.push(event)
     }
   }
 
   start()
-  for (let index = 0; index < queue.length; index++) {
-    while (index >= events.length) {
-      if (running === 0) return
-      await new Promise<void>(resolve => (wake = resolve))
+  try {
+    for (let index = 0; index < queue.length; index++) {
+      while (index >= events.length) {
+        if (running === 0) return
+        await new Promise<void>(resolve => (wake = resolve))
+      }
+      yield await events[index]!
     }
-    yield await events[index]!
+  } finally {
+    stopped = true
+    await Promise.allSettled(events)
   }
 }

@@ -4,7 +4,7 @@
  * @module
  */
 
-import type { ArchiveMismatchError, FileSystemError, InvalidRepoNameError } from '../archive/archive.errors'
+import type { ArchiveMismatchError, FileSystemError, InvalidRepoNameError, RepoLockedError } from '../archive/archive.errors'
 import type { ArchiveEntry, ArchiveLayout, ArchivePaths } from '../archive/archive.types'
 import type { GitError } from '../git/git.errors'
 
@@ -37,7 +37,7 @@ export interface RestoreOutcome {
 }
 
 /** The ways restoring one repository can fail. */
-export type RestoreError = GitError | FileSystemError | InvalidRepoNameError | ArchiveMismatchError
+export type RestoreError = GitError | FileSystemError | InvalidRepoNameError | ArchiveMismatchError | RepoLockedError
 
 /** One step of {@linkcode restoreRepos}: a repository that was restored, or one that failed. */
 export type RestoreEvent =

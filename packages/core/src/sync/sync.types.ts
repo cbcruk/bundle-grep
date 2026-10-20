@@ -4,11 +4,10 @@
  * @module
  */
 
-import type { FileSystemError, InvalidRepoNameError } from '../archive/archive.errors'
+import type { FileSystemError, InvalidRepoNameError, RepoLockedError } from '../archive/archive.errors'
 import type { ArchiveLayout, ArchivePaths, RepoMetadata } from '../archive/archive.types'
 import type { GitError } from '../git/git.errors'
 import type { GhError } from '../github/github.errors'
-import type { SyncLockedError } from './sync.errors'
 import type { GithubOptions } from '../github/github.types'
 
 /**
@@ -78,7 +77,7 @@ export interface SyncOutcome {
 }
 
 /** The ways syncing one repository can fail. */
-export type SyncError = GitError | FileSystemError | InvalidRepoNameError | SyncLockedError
+export type SyncError = GitError | FileSystemError | InvalidRepoNameError | RepoLockedError
 
 /** One step of {@linkcode syncRepos}: a repository that synced, or one that failed. */
 export type SyncEvent =

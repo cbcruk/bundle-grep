@@ -29,3 +29,13 @@ export class FileSystemError extends TaggedError('FileSystemError')<{
   /** Human-readable summary, suitable for showing the user. */
   readonly message: string
 }> {}
+
+/** Another sync or restore, in this process or another one, is already updating the repository. */
+export class RepoLockedError extends TaggedError('RepoLockedError')<{
+  /** The lock file the other run holds. */
+  readonly path: string
+  /** The process holding the lock, when it could be read. */
+  readonly pid: number | null
+  /** Human-readable summary, suitable for showing the user. */
+  readonly message: string
+}> {}

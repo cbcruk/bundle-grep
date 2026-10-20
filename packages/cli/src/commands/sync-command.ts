@@ -8,6 +8,7 @@ import { DEFAULT_SYNC_CONCURRENCY, resolveSyncSource, syncRepos, type SyncTarget
 import { Result } from 'better-result'
 
 import { parseCommandArgs, wholeNumber } from '../args'
+import { UsageError } from '../cli.errors'
 import type { Command, Io } from '../cli.types'
 import { EXIT } from '../exit-codes'
 import { stylesFor } from '../format/ansi'
@@ -27,16 +28,18 @@ Sources:
 
 Options:
   --concurrency <n>
-                   repositories to sync at once (default ${DEFAULT_SYNC_CONCURRENCY}; 1 for ssh URLs at a terminal,
-                   so ssh prompts do not interleave)
+                   repositories to sync at once, up to 64 (default ${DEFAULT_SYNC_CONCURRENCY}; 1 for ssh URLs at
+                   a terminal, so ssh prompts do not interleave)
   --limit <n>      fail for an owner with more repositories than this (default 1000)
   --root <dir>     where the archive lives (default $BUNDLE_GREP_ROOT or ~/.bundle-grep)
   --json           print one JSON object per source or repository
   -h, --help       show this help
 `
 
+const MAX_CONCURRENCY = 64
+
 function usesSsh(url: string): boolean {
-  return !/^(https?|file):\/\//i.test(url) && !url.startsWith('/')
+  return !/^(https?|file|git):\/\//i.test(url) && !url.startsWith('/')
 }
 
 async function run(args: string[], io: Io): Promise<number> {
@@ -47,6 +50,9 @@ async function run(args: string[], io: Io): Promise<number> {
       Result.gen(function* () {
         const limit = yield* wholeNumber('limit', values.limit, 1000, 1)
         const concurrency = values.concurrency === undefined ? undefined : yield* wholeNumber('concurrency', values.concurrency, 1, 1)
+        if (concurrency !== undefined && concurrency > MAX_CONCURRENCY) {
+          return Result.err(new UsageError({ message: `--concurrency must be at most ${MAX_CONCURRENCY}, not ${concurrency}` }))
+        }
         return Result.ok({ values, positionals, limit, concurrency })
       }),
   )
