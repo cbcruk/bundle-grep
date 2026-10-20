@@ -1,3 +1,11 @@
+/**
+ * Serves fetch handlers on a free local port for tests.
+ *
+ * @module
+ */
+
+import type { AddressInfo } from 'node:net'
+
 import { serve } from 'srvx'
 
 /** A test server on a free port of 127.0.0.1. */
@@ -13,7 +21,7 @@ export interface Listening extends AsyncDisposable {
 /** Serves a fetch handler on a free port of 127.0.0.1 until closed or disposed. */
 export async function listen(fetch: (request: Request) => Response | Promise<Response>): Promise<Listening> {
   const server = await serve({ hostname: '127.0.0.1', port: 0, silent: true, gracefulShutdown: false, fetch }).ready()
-  const port = Number(new URL(server.url!).port)
+  const port = (server.node!.server!.address() as AddressInfo).port
   const close = (): Promise<void> => server.close(true)
   return { port, origin: `http://127.0.0.1:${port}`, close, [Symbol.asyncDispose]: close }
 }

@@ -96,6 +96,12 @@ describe('serveApp', () => {
     expect(redirect.status).toBe(302)
   })
 
+  test('a request with a body is proxied too', async () => {
+    const response = await fetch(`${base}/__vite_ping`, { method: 'POST', body: 'x' })
+    expect(response.status).toBe(200)
+    expect(await response.json()).toMatchObject({ path: '/__vite_ping' })
+  })
+
   test('a path that looks like another host stays on the dev server', async () => {
     await using outside = await listen(() => new Response('outside'))
     const response = await fetch(`${base}//127.0.0.1:${outside.port}/payload`)

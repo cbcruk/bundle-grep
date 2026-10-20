@@ -18,6 +18,7 @@
   },
   "include": [
     "packages/*/src",
+    "packages/*/*.ts",
     "packages/*/test",
     "apps/*/src",
     "apps/*/test",

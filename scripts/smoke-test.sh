@@ -57,6 +57,13 @@ url=$(grep -o 'http://[^ ]*' "$work/ui.log" | head -n 1) || fail "ui printed no 
 curl -fsS -o "$work/page.html" "${url%%#*}" || fail "ui does not answer"
 grep -q '<title>bundle-grep</title>' "$work/page.html" || fail "ui does not serve the search page"
 kill -INT "$ui"
-wait "$ui" || true
+for _ in $(seq 100); do
+  if ! kill -0 "$ui" 2>/dev/null; then break; fi
+  sleep 0.1
+done
+if kill -0 "$ui" 2>/dev/null; then fail "ui did not stop on SIGINT"; fi
+status=0
+wait "$ui" || status=$?
 ui=
+if [[ $status != 130 ]]; then fail "ui exited $status on SIGINT, not 130"; fi
 echo "smoke test passed"

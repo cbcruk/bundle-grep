@@ -41,11 +41,11 @@ jobs:
       - name: Check documentation
         run: pnpm docs:check
 
-      - name: Test
-        run: pnpm test
-
       - name: Build
         run: pnpm build
+
+      - name: Test
+        run: pnpm test
 
       - name: Smoke test the package
         run: |

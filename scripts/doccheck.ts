@@ -98,12 +98,12 @@ try {
   )
 
   const tsc = spawnSync('pnpm', ['exec', 'tsc', '--noEmit', '-p', dir], { cwd: ROOT, encoding: 'utf8' })
-  const output = (tsc.stdout + tsc.stderr).trim()
+  const output = tsc.error ? `could not run tsc: ${tsc.error.message}` : `${tsc.stdout}${tsc.stderr}`.trim()
 
   console.log(`example blocks type-checked: ${examples.length}`)
   console.log(output || 'all example blocks OK')
 
-  process.exit(missing.length === 0 && !output ? 0 : 1)
+  process.exitCode = missing.length === 0 && !output ? 0 : 1
 } finally {
   rmSync(dir, { recursive: true, force: true })
 }

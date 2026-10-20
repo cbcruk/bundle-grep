@@ -36,13 +36,15 @@ jobs:
           fi
           echo "version=$version" >> "$GITHUB_OUTPUT"
 
+      - name: Build the UI
+        run: pnpm build:ui
+
       - name: Check
         run: pnpm typecheck && pnpm lint && pnpm docs:check && pnpm test
 
-      # prepack builds the CLI; the UI it ships is built first.
+      # prepack builds the CLI bundle around the UI built above.
       - name: Pack
         run: |
-          pnpm build:ui
           mkdir out
           pnpm --filter bundle-grep pack --pack-destination "$PWD/out"
           cd out && sha256sum *.tgz > SHA256SUMS

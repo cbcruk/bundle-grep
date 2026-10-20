@@ -161,7 +161,8 @@ negated or used inside `OR`.
 ## Development
 
 Requires Node.js 24 or later, pnpm, and git. Tests run with
-[Vitest](https://vitest.dev); `pnpm cli <command>` runs the CLI from source.
+[Vitest](https://vitest.dev); `pnpm cli <command>` runs the CLI from source,
+with relative paths resolved from the repository root.
 
 ```sh
 pnpm install
