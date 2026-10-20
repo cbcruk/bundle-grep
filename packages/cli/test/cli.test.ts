@@ -1,8 +1,10 @@
-import { afterAll, beforeAll, describe, expect, test } from 'bun:test'
+import { afterAll, beforeAll, describe, expect, test } from 'vitest'
 import { chmodSync, mkdirSync, readFileSync, rmSync, symlinkSync, writeFileSync } from 'node:fs'
 import { dirname, join } from 'node:path'
+import { setTimeout as sleep } from 'node:timers/promises'
 
 import { createFixtureRepo, isolateGitConfig, type FixtureRepo } from '../../core/test/fixture'
+import { listen } from '../../core/test/listen'
 import type { Io } from '../src/cli.types'
 import { run } from '../src/run'
 
@@ -91,7 +93,7 @@ describe('bundle-grep', () => {
   })
 
   test('prints the version from the package manifest', async () => {
-    const { version } = JSON.parse(readFileSync(join(import.meta.dir, '../package.json'), 'utf8')) as { version: string }
+    const { version } = JSON.parse(readFileSync(join(import.meta.dirname, '../package.json'), 'utf8')) as { version: string }
     expect(await cli('--version')).toEqual({ code: 0, stdout: `bundle-grep ${version}\n`, stderr: '' })
     expect((await cli('-v')).stdout).toBe(`bundle-grep ${version}\n`)
   })
@@ -248,7 +250,7 @@ describe('bundle-grep', () => {
   })
 
   test('ui serves until interrupted, printing the URL', async () => {
-    using dev = Bun.serve({ hostname: '127.0.0.1', port: 0, fetch: () => new Response('page') })
+    await using dev = await listen(() => new Response('page'))
     const interrupt = new AbortController()
     let stdout = ''
     const running = cliWith(
@@ -256,9 +258,9 @@ describe('bundle-grep', () => {
       'ui',
       '--no-open',
       '--dev-server',
-      `http://127.0.0.1:${dev.port}`,
+      dev.origin,
     )
-    while (!stdout.includes('\n')) await Bun.sleep(10)
+    while (!stdout.includes('\n')) await sleep(10)
     const url = /http:\/\/\S+/.exec(stdout)![0]
     expect(await (await fetch(url)).text()).toBe('page')
     interrupt.abort()

@@ -1,4 +1,4 @@
-import { describe, expect, test } from 'bun:test'
+import { describe, expect, test } from 'vitest'
 
 import { facetToken, hasFacet, pathValue, quoteValue, toggleFacet } from '../../www/src/lib/query-edit'
 

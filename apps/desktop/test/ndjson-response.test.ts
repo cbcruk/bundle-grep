@@ -1,4 +1,5 @@
-import { describe, expect, test } from 'bun:test'
+import { describe, expect, test } from 'vitest'
+import { setTimeout as sleep } from 'node:timers/promises'
 
 import { ndjsonResponse } from '../src/api/ndjson-response'
 
@@ -10,7 +11,7 @@ function tracked(): { calls: string[]; onCancel: () => void; onClose: () => void
 async function* slow(steps: number, ms: number, calls: string[]): AsyncGenerator<{ n: number }, void> {
   try {
     for (let n = 1; n <= steps; n++) {
-      await Bun.sleep(ms)
+      await sleep(ms)
       yield { n }
     }
   } finally {
@@ -46,7 +47,7 @@ describe('ndjsonResponse', () => {
     const reader = ndjsonResponse(slow(3, 150, hooks.calls), { ...hooks, heartbeatMs: 20 }).body!.getReader()
     expect(new TextDecoder().decode((await reader.read()).value)).toBe('{"type":"heartbeat"}\n')
     const cancelled = reader.cancel()
-    await Bun.sleep(60)
+    await sleep(60)
     expect(hooks.calls).toEqual(['cancel'])
     await cancelled
     expect(hooks.calls).toEqual(['cancel', 'finally', 'close'])

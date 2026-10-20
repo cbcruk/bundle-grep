@@ -34,11 +34,12 @@ import { searchRoute } from './search-route'
  * @example Serving the API
  * ```ts
  * import { createApi } from "@bundle-grep/desktop";
+ * import { serve } from "srvx";
  *
  * const layout = { archiveDir: "./archive", cacheDir: "./cache" };
  * const api = createApi({ layout, root: ".", host: "127.0.0.1:4100", token: "secret" });
  *
- * Bun.serve({ hostname: "127.0.0.1", port: 4100, fetch: async request => (await api(request)) ?? new Response(null, { status: 404 }) });
+ * serve({ hostname: "127.0.0.1", port: 4100, fetch: async request => (await api(request)) ?? new Response(null, { status: 404 }) });
  * ```
  */
 export function createApi(options: ApiOptions): ApiHandler {

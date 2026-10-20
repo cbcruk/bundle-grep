@@ -12,11 +12,12 @@
  * @module
  */
 
-import { Glob } from 'bun'
-import { mkdtempSync, rmSync, writeFileSync } from 'node:fs'
+import { spawnSync } from 'node:child_process'
+import { globSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs'
+import { readFile } from 'node:fs/promises'
 import { join } from 'node:path'
 
-const ROOT = join(import.meta.dir, '..')
+const ROOT = join(import.meta.dirname, '..')
 
 /** Top-level `export` forms that need their own JSDoc block. */
 const EXPORT = /^export (async function|function|class|interface|type|const|default)\b/
@@ -27,9 +28,9 @@ const MEMBER = /^  (?!#|\/|\*|\})(?:readonly |static |async |get |set )*[A-Za-z_
 const missing: string[] = []
 const examples: { file: string; code: string }[] = []
 
-for (const rel of [...new Glob('{packages,apps}/*/{src,test}/**/*.ts').scanSync(ROOT)].sort()) {
+for (const rel of globSync('{packages,apps}/*/{src,test}/**/*.ts', { cwd: ROOT }).sort()) {
   if (rel.endsWith('.test.ts')) continue
-  const text = await Bun.file(join(ROOT, rel)).text()
+  const text = await readFile(join(ROOT, rel), 'utf8')
   const lines = text.split('\n')
 
   let inType = false
@@ -81,7 +82,7 @@ try {
         target: 'ESNext',
         module: 'Preserve',
         moduleResolution: 'bundler',
-        types: ['bun'],
+        types: ['node'],
         strict: true,
         skipLibCheck: true,
         noEmit: true,
@@ -92,12 +93,12 @@ try {
           '@bundle-grep/desktop': [join(ROOT, 'apps/desktop/src/index.ts')],
         },
       },
-      files: [...files, join(ROOT, 'packages/core/src/assets.d.ts')],
+      files,
     }),
   )
 
-  const tsc = Bun.spawnSync(['pnpm', 'exec', 'tsc', '--noEmit', '-p', dir], { cwd: ROOT })
-  const output = (tsc.stdout.toString() + tsc.stderr.toString()).trim()
+  const tsc = spawnSync('pnpm', ['exec', 'tsc', '--noEmit', '-p', dir], { cwd: ROOT, encoding: 'utf8' })
+  const output = (tsc.stdout + tsc.stderr).trim()
 
   console.log(`example blocks type-checked: ${examples.length}`)
   console.log(output || 'all example blocks OK')

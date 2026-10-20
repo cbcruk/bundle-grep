@@ -6,12 +6,12 @@
 
 import { Result } from 'better-result'
 import { readFile } from 'node:fs/promises'
-import runtimeWasm from 'web-tree-sitter/web-tree-sitter.wasm' with { type: 'file' }
 import { Language, Parser, Query, type Node } from 'web-tree-sitter'
 
 import { GRAMMARS } from './grammars'
 import { SymbolParserError } from './symbols.errors'
 import type { GrammarId, SymbolDefinition, SymbolExtractor, SymbolKind } from './symbols.types'
+import { wasmFile } from './wasm-file'
 
 interface Loaded {
   language: Language
@@ -141,7 +141,7 @@ function failure(what: string, cause: unknown): SymbolParserError {
 
 function loadRuntime(): Promise<Result<void, SymbolParserError>> {
   runtime ??= Result.tryPromise({
-    try: async () => Parser.init({ wasmBinary: new Uint8Array(await readFile(runtimeWasm)) }),
+    try: async () => Parser.init({ wasmBinary: new Uint8Array(await readFile(wasmFile('web-tree-sitter/web-tree-sitter.wasm'))) }),
     catch: cause => failure('tree-sitter', cause),
   })
   return runtime
@@ -152,7 +152,7 @@ function loadGrammar(id: GrammarId): Promise<Result<Loaded, SymbolParserError>> 
   if (!grammar) {
     grammar = Result.tryPromise({
       try: async () => {
-        const language = await Language.load(new Uint8Array(await readFile(GRAMMARS[id].wasm)))
+        const language = await Language.load(new Uint8Array(await readFile(wasmFile(GRAMMARS[id].wasm))))
         return { language, query: new Query(language, GRAMMARS[id].query) }
       },
       catch: cause => failure(`the ${id} grammar`, cause),

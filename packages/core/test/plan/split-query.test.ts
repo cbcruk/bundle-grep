@@ -1,4 +1,4 @@
-import { describe, expect, test } from 'bun:test'
+import { describe, expect, test } from 'vitest'
 
 import { compileQuery } from '../../src/plan/compile-query'
 import { parseQuery } from '../../src/query/parse-query'

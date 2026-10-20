@@ -1,4 +1,4 @@
-import { describe, expect, test } from 'bun:test'
+import { describe, expect, test } from 'vitest'
 
 import { applyEvent, finishSearch, RUNNING } from '../../www/src/hooks/use-search.utils'
 

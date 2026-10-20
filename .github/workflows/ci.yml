@@ -21,10 +21,11 @@ jobs:
 
       - uses: pnpm/action-setup@v4
 
-      # Keep in step with release.yml, so CI tests the runtime that ships.
-      - uses: oven-sh/setup-bun@v2
+      # Keep in step with release.yml and the package's engines.
+      - uses: actions/setup-node@v4
         with:
-          bun-version: 1.4.0
+          node-version: 24
+          cache: pnpm
 
       - run: pnpm install --frozen-lockfile
 
@@ -43,8 +44,11 @@ jobs:
       - name: Test
         run: pnpm test
 
-      - name: Build UI
-        run: pnpm build:ui
+      - name: Build
+        run: pnpm build
 
-      - name: Compile
-        run: bun build --compile packages/cli/src/main.ts --outfile bundle-grep
+      - name: Smoke test the package
+        run: |
+          pnpm --filter bundle-grep pack --pack-destination "$RUNNER_TEMP"
+          npm install --global --prefix "$RUNNER_TEMP/prefix" "$RUNNER_TEMP"/bundle-grep-*.tgz
+          scripts/smoke-test.sh "$RUNNER_TEMP/prefix/bin/bundle-grep"

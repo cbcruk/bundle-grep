@@ -1,4 +1,4 @@
-import { describe, expect, test } from 'bun:test'
+import { describe, expect, test } from 'vitest'
 
 import { findLanguage, languageNames, languageOf } from '../../src/plan/languages'
 

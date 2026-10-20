@@ -1,8 +1,10 @@
-import { afterAll, beforeAll, describe, expect, test } from 'bun:test'
+import { afterAll, beforeAll, describe, expect, test } from 'vitest'
 import { join } from 'node:path'
+import { setTimeout as sleep } from 'node:timers/promises'
 
 import { syncRepos, type ArchiveLayout } from '@bundle-grep/core'
 
+import { listen } from '../../../packages/core/test/listen'
 import { createFixtureRepo, isolateGitConfig, type FixtureRepo } from '../../../packages/core/test/fixture'
 import { createApi } from '../src/api/create-api'
 import { TOKEN_HEADER } from '../src/api/guard'
@@ -190,17 +192,15 @@ describe('/api/search', () => {
 
   test('a client that disconnects aborts the request signal, which stops the search', async () => {
     let seen: Request | undefined
-    using server = Bun.serve({
-      port: 0,
-      hostname: '127.0.0.1',
-      fetch: async request => {
-        seen = request
-        const api = createApi({ layout, root: fixture.root, host: `127.0.0.1:${server.port}`, token: TOKEN })
-        return (await api(request)) ?? new Response('Not found', { status: 404 })
-      },
+    let host = ''
+    await using server = await listen(async request => {
+      seen = request
+      const api = createApi({ layout, root: fixture.root, host, token: TOKEN })
+      return (await api(request)) ?? new Response('Not found', { status: 404 })
     })
+    host = `127.0.0.1:${server.port}`
     const client = new AbortController()
-    const response = await fetch(`http://127.0.0.1:${server.port}/api/search?q=useState`, {
+    const response = await fetch(`${server.origin}/api/search?q=useState`, {
       headers: { [TOKEN_HEADER]: TOKEN },
       signal: client.signal,
     })
@@ -213,7 +213,7 @@ describe('/api/search', () => {
         if (seen?.signal.aborted) resolve(true)
         seen?.signal.addEventListener('abort', () => resolve(true), { once: true })
       }),
-      Bun.sleep(3000).then(() => false),
+      sleep(3000).then(() => false),
     ])
     expect(aborted).toBe(true)
   })

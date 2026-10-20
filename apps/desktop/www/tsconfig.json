@@ -5,11 +5,11 @@
     "module": "Preserve",
     "moduleResolution": "bundler",
     "jsx": "react-jsx",
-    "types": ["vite/client", "bun"],
+    "types": ["vite/client", "node"],
     "strict": true,
     "noUncheckedIndexedAccess": true,
     "skipLibCheck": true,
     "noEmit": true
   },
-  "include": ["src", "../../../packages/core/src/assets.d.ts"]
+  "include": ["src"]
 }

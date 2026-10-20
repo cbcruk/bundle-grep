@@ -4,20 +4,27 @@
   "type": "module",
   "packageManager": "pnpm@10.33.0",
   "engines": {
-    "bun": ">=1.3.12"
+    "node": ">=24"
   },
   "scripts": {
     "typecheck": "tsc --noEmit && tsc --noEmit -p apps/desktop/www",
     "lint": "oxlint",
-    "docs:check": "bun scripts/doccheck.ts",
-    "test": "bun test",
-    "bench": "bun scripts/bench.ts",
+    "docs:check": "tsx scripts/doccheck.ts",
+    "test": "vitest run",
+    "bench": "tsx scripts/bench.ts",
     "dev:ui": "pnpm --filter @bundle-grep/desktop dev",
-    "build:ui": "pnpm --filter @bundle-grep/desktop build"
+    "build:ui": "pnpm --filter @bundle-grep/desktop build",
+    "cli": "tsx packages/cli/src/main.ts",
+    "build": "pnpm build:ui && pnpm --filter bundle-grep build"
   },
   "devDependencies": {
-    "@types/bun": "^1.4.3",
+    "@types/node": "^24.19.2",
     "oxlint": "^1.88.0",
-    "typescript": "^7.0.2"
+    "srvx": "1.0.6",
+    "tsdown": "0.23.1",
+    "tsx": "^4.23.15",
+    "typescript": "^7.0.2",
+    "vitest": "5.0.5",
+    "yaml": "^2.9.1"
   }
 }

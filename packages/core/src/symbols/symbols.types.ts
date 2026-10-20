@@ -27,7 +27,7 @@ export type GrammarId = 'c' | 'cpp' | 'csharp' | 'go' | 'java' | 'javascript' | 
 
 /** What extracting with one grammar needs. */
 export interface Grammar {
-  /** The grammar's WebAssembly file. */
+  /** The grammar's WebAssembly file, as a package path such as `tree-sitter-c/tree-sitter-c.wasm`. */
   wasm: string
   /** The tags query, definitions only. */
   query: string

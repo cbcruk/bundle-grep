@@ -6,7 +6,7 @@
  * @module
  */
 
-import data from './languages.generated.json'
+import data from './languages.generated.json' with { type: 'json' }
 import type { Language } from './plan.types'
 
 function normalize(name: string): string {
