@@ -121,6 +121,7 @@ export async function describeCommits(options: DescribeCommitsOptions): Promise<
     '--patch',
     '--unified=0',
     '--inter-hunk-context=0',
+    '--submodule=short',
     '--src-prefix=a/',
     '--dst-prefix=b/',
   ]
