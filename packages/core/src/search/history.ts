@@ -47,8 +47,9 @@ function logArgs(history: HistoryPattern): string[] {
  * diff. Git diffs every commit it walks past, so it is stopped as soon as
  * `max` commits were kept, or `enough` is aborted, rather than left to walk
  * the whole history. A commit counts once its output so far ends between
- * two names, as git writes each commit whole, rather than when the next
- * commit begins; names that arrive later are still added to it.
+ * two names, rather than when the next commit begins, as git flushes after
+ * each commit. Since a long list of names can still arrive in pieces, git is
+ * only stopped once a commit counted early has been read to its end.
  *
  * @returns The commits and whether that was all of them, or the
  * {@linkcode GitError} of running git.
@@ -58,8 +59,14 @@ export async function matchingCommits(options: MatchingCommitsOptions): Promise<
   const commits: LoggedCommit[] = []
   const full = new AbortController()
   const enough = options.enough ? AbortSignal.any([full.signal, options.enough]) : full.signal
+  const kill = new AbortController()
   const kept = new Map<string, LoggedCommit>()
-  const consider = (commit: LoggedCommit): void => {
+  let reading: string | undefined
+  const stopWhenClosed = (): void => {
+    if (enough.aborted && reading === undefined) kill.abort()
+  }
+  enough.addEventListener('abort', stopWhenClosed)
+  const consider = (commit: LoggedCommit, closed: boolean): void => {
     const files = commit.files.filter(path => matchesPath(expr, path))
     const known = kept.get(commit.sha)
     if (known) {
@@ -68,25 +75,29 @@ export async function matchingCommits(options: MatchingCommitsOptions): Promise<
       const keep = { sha: commit.sha, files }
       kept.set(commit.sha, keep)
       commits.push(keep)
+      if (!closed) reading = commit.sha
       onCommit?.(keep)
     }
+    if (closed && reading === commit.sha) reading = undefined
     if (commits.length >= max) full.abort()
+    stopWhenClosed()
   }
-  const parser = createNameLogParser(consider)
+  const parser = createNameLogParser(commit => consider(commit, true))
   const decoder = new TextDecoder()
   const args = [...logArgs(history), '--format=%x1e%H', '--name-only', '-z', ref, '--', ...narrowingPathspecs(expr)]
   const result = await runGit(args, {
     cwd: gitDir,
-    signal: AbortSignal.any([signal, enough]),
+    signal: AbortSignal.any([signal, kill.signal]),
     onStdout: chunk => {
-      if (enough.aborted) return
+      if (kill.signal.aborted) return
       parser.push(decoder.decode(chunk, { stream: true }))
       const open = parser.open()
-      if (open) consider(open)
+      if (open) consider(open, false)
     },
   })
+  enough.removeEventListener('abort', stopWhenClosed)
   const stopped = result.isOk() || result.error.exitCode === null
-  if (enough.aborted && !signal.aborted && stopped) return Result.ok({ commits, complete: false })
+  if (kill.signal.aborted && !signal.aborted && stopped) return Result.ok({ commits, complete: false })
   if (result.isErr()) return result
   parser.push(decoder.decode())
   parser.end()

@@ -126,7 +126,10 @@ export async function listMatchingFiles(options: ListMatchingFilesOptions): Prom
   let tree: Promise<Result<TreeFiles, GitError>> | undefined
   let symbols: Promise<Result<SymbolIndex, SymbolIndexError>> | undefined
   const known = new Set<string>()
-  const wholeTree = hasNot(expr) ? grepTextFiles(gitDir, ref, pathspecs, signal) : undefined
+  const spare = new AbortController()
+  const wholeTree = hasNot(expr)
+    ? grepTextFiles(gitDir, ref, pathspecs, signal ? AbortSignal.any([signal, spare.signal]) : spare.signal)
+    : undefined
 
   const treeFiles = (): Promise<Result<TreeFiles, GitError>> => {
     tree ??= listTreeFiles(gitDir, ref, signal)
@@ -188,17 +191,22 @@ export async function listMatchingFiles(options: ListMatchingFilesOptions): Prom
     }
   }
 
-  const matched = await evaluate(expr)
-  if (matched.isErr()) return matched
-  const unchecked = [...matched.value].filter(path => !known.has(path))
-  if (unchecked.length === 0) return Result.ok([...matched.value].sort())
+  try {
+    const matched = await evaluate(expr)
+    if (matched.isErr()) return matched
+    const unchecked = [...matched.value].filter(path => !known.has(path))
+    if (unchecked.length === 0) return Result.ok([...matched.value].sort())
 
-  const files = await treeFiles()
-  if (files.isErr()) return files
-  const nonEmpty = unchecked.filter(path => !files.value.empty.has(path))
-  const named = nonEmpty.length <= CHECK_LIMIT && !nonEmpty.some(path => path.includes('\uFFFD'))
-  const text = await (wholeTree ?? (named ? namedTextFiles(gitDir, ref, nonEmpty, signal) : grepTextFiles(gitDir, ref, pathspecs, signal)))
-  if (text.isErr()) return text
-  const binary = new Set(nonEmpty.filter(path => !text.value.has(path)))
-  return Result.ok([...matched.value].filter(path => !binary.has(path)).sort())
+    const files = await treeFiles()
+    if (files.isErr()) return files
+    const nonEmpty = unchecked.filter(path => !files.value.empty.has(path))
+    const named = nonEmpty.length <= CHECK_LIMIT && !nonEmpty.some(path => path.includes('\uFFFD'))
+    const text = await (wholeTree ??
+      (named ? namedTextFiles(gitDir, ref, nonEmpty, signal) : grepTextFiles(gitDir, ref, pathspecs, signal)))
+    if (text.isErr()) return text
+    const binary = new Set(nonEmpty.filter(path => !text.value.has(path)))
+    return Result.ok([...matched.value].filter(path => !binary.has(path)).sort())
+  } finally {
+    spare.abort()
+  }
 }
