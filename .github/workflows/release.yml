@@ -77,7 +77,7 @@ jobs:
 
       - name: Smoke test
         run: |
-          npm install --global --prefix "$RUNNER_TEMP/prefix" out/bundle-grep-*.tgz
+          npm install --global --prefix "$RUNNER_TEMP/prefix" ./out/bundle-grep-*.tgz
           scripts/smoke-test.sh "$RUNNER_TEMP/prefix/bin/bundle-grep" "${{ needs.pack.outputs.version }}"
 
   release:
@@ -104,7 +104,7 @@ jobs:
         run: |
           tag=()
           if [[ $GITHUB_REF_NAME == *-* ]]; then tag=(--tag next); fi
-          npm publish out/bundle-grep-*.tgz --access public "${tag[@]}"
+          npm publish ./out/bundle-grep-*.tgz --access public "${tag[@]}"
 
       - name: Create the GitHub release
         env:
