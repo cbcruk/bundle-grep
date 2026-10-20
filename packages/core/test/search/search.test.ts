@@ -288,6 +288,32 @@ describe('symbol:', () => {
     expect(files(await collect('useState -symbol:useState'))).toEqual(['me/app/README.md', 'me/app/src/counter.ts', 'me/app/src/useState.md'])
   })
 
+  test('a qualified name finds a method by the type it belongs to, highlighting its name', async () => {
+    using fixture = createFixtureRepo([
+      {
+        message: 'init',
+        files: {
+          'maint.go': 'package db\n\nfunc (m *Maint) deleteRows() {}\nfunc (o Other) deleteRows() {}\n',
+          'lib.rs': 'impl Maint {\n    fn deleteRows() {}\n}\n',
+        },
+      },
+    ])
+    const repo = { name: 'me/db', gitDir: join(fixture.repo, '.git') }
+    const found = async (query: string): Promise<SearchEvent[]> => {
+      const plan = parseQuery(query).andThen(compileQuery).unwrap()
+      const events: SearchEvent[] = []
+      for await (const event of search({ plan, repos: [repo], holds: () => true })) events.push(event)
+      return events
+    }
+
+    expect(shown(await found('symbol:Maint.deleteRows'))).toEqual({
+      'me/db/lib.rs': [[2, false, 7, [{ start: 7, end: 17 }]]],
+      'me/db/maint.go': [[3, false, 16, [{ start: 16, end: 26 }]]],
+    })
+    expect(Object.keys(shown(await found('symbol:Maint::deleteRows language:rust')))).toEqual(['me/db/lib.rs'])
+    expect(shown(await found('symbol:deleteRows'))['me/db/maint.go']).toHaveLength(2)
+  })
+
   test('the index is built on first use and kept in the repository', async () => {
     expect(existsSync(join(repos[0]!.gitDir, 'bundle-grep-symbols.json'))).toBe(true)
   })
