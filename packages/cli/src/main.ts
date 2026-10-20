@@ -1,6 +1,12 @@
 #!/usr/bin/env node
 
-import { run } from './run'
+const major = Number(process.versions.node.split('.')[0])
+if (major < 24) {
+  process.stderr.write(`bundle-grep needs Node.js 24 or later; this is ${process.version}\n`)
+  process.exit(2)
+}
+
+const { run } = await import('./run')
 
 const controller = new AbortController()
 process.once('SIGINT', () => controller.abort())
@@ -24,3 +30,5 @@ const code = await run(process.argv.slice(2), {
 })
 
 process.exitCode = controller.signal.aborted ? 130 : code
+
+export {}

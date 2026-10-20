@@ -3,6 +3,15 @@
   "version": "0.1.0",
   "description": "Archive git repositories as bundles and search them with GitHub code search syntax, locally.",
   "license": "UNLICENSED",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/cbcruk/bundle-grep.git",
+    "directory": "packages/cli"
+  },
+  "homepage": "https://github.com/cbcruk/bundle-grep#readme",
+  "bugs": {
+    "url": "https://github.com/cbcruk/bundle-grep/issues"
+  },
   "type": "module",
   "bin": {
     "bundle-grep": "./dist/main.mjs"

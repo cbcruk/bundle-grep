@@ -8,6 +8,7 @@ import { Result } from 'better-result'
 import { randomBytes } from 'node:crypto'
 import { existsSync } from 'node:fs'
 import { readFile } from 'node:fs/promises'
+import type { AddressInfo } from 'node:net'
 import { serve } from 'srvx'
 
 import { createApi } from './api/create-api'
@@ -61,7 +62,7 @@ export async function serveApp(options: ServeAppOptions): Promise<Result<AppServ
   })
   if (served.isErr()) return served
   const server = served.value
-  const host = `127.0.0.1:${new URL(server.url!).port}`
+  const host = `127.0.0.1:${(server.node!.server!.address() as AddressInfo).port}`
   const api = createApi({ ...options, host, token, signal })
   const page = uiHandler(ui.value)
   const session = sessionRoute({ host, code, token })
@@ -140,6 +141,7 @@ async function proxy(request: Request, origin: string): Promise<Response> {
       body: request.method === 'GET' || request.method === 'HEAD' ? undefined : request.body,
       redirect: 'manual',
       signal: request.signal,
+      duplex: 'half',
     }),
   )
   if (forwarded.isErr()) {
