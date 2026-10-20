@@ -4,18 +4,13 @@
  * @module
  */
 
-import type { ApiHandler, ApiOptions } from '../desktop.types'
+import type { ApiHandler, ApiOptions, ApiRoute } from '../desktop.types'
 import { languagesRoute, reposRoute, settingsRoute, symbolLanguagesRoute } from './archive-routes'
 import { blobRoute } from './blob-route'
 import { guard } from './guard'
 import { jobRoutes } from './job-routes'
 import { errorResponse } from './respond'
 import { searchRoute } from './search-route'
-
-interface Route {
-  method: 'GET' | 'POST'
-  handle: (request: Request) => Response | Promise<Response>
-}
 
 /**
  * Builds the handler for every `/api/` path.
@@ -45,7 +40,7 @@ interface Route {
  */
 export function createApi(options: ApiOptions): ApiHandler {
   const jobs = jobRoutes(options)
-  const routes: Record<string, Route> = {
+  const routes: Record<string, ApiRoute> = {
     '/api/search': { method: 'GET', handle: request => searchRoute(request, options) },
     '/api/repos': { method: 'GET', handle: () => reposRoute(options) },
     '/api/settings': { method: 'GET', handle: () => settingsRoute(options) },
@@ -54,7 +49,7 @@ export function createApi(options: ApiOptions): ApiHandler {
     '/api/sync': { method: 'POST', handle: jobs.sync },
     '/api/restore': { method: 'POST', handle: jobs.restore },
   }
-  const blob: Route = { method: 'GET', handle: request => blobRoute(request, options.layout) }
+  const blob: ApiRoute = { method: 'GET', handle: request => blobRoute(request, options.layout) }
 
   return request => {
     const { pathname } = new URL(request.url)

@@ -17,8 +17,8 @@ import { batchSshEnv, hasSshCommandConfig } from '../ssh-env'
 const USAGE = `Usage: bundle-grep ui [options]
 
 Serves the search page from 127.0.0.1 only, prints its URL and opens it in the
-default browser. The URL carries a token that changes every run. Runs until
-Ctrl-C.
+default browser. The URL carries a code that works once, for the first page
+that opens it. Runs until Ctrl-C.
 
 Options:
   --port <n>          listen on this port (default any free one)
@@ -83,7 +83,7 @@ async function run(args: string[], io: Io): Promise<number> {
   }
   const server = served.value
   io.write(`bundle-grep is serving ${server.url}\nPress Ctrl-C to stop.\n`)
-  if (!values['no-open'] && !(await openBrowser(server.url))) {
+  if (!values['no-open'] && !(await openBrowser(server.url)) && !io.signal?.aborted) {
     io.error(formatNotice('warning', 'Could not open a browser; open the URL above', errors))
   }
   if (!io.signal?.aborted) {

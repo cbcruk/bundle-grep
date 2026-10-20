@@ -7,6 +7,7 @@
 
 export { createApi } from './api/create-api'
 export { TOKEN_HEADER } from './api/guard'
+export { DEFAULT_HEARTBEAT_MS, ndjsonResponse } from './api/ndjson-response'
 export { ServeError, UiNotBuiltError } from './desktop.errors'
 export type {
   ApiHandler,
@@ -17,6 +18,7 @@ export type {
   ArchiveSummary,
   JobRouteOptions,
   JobStreamEvent,
+  NdjsonResponseOptions,
   RepoList,
   RepoRow,
   RepoState,

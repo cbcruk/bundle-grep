@@ -12,15 +12,27 @@ function opener(url: string): string[] {
   return ['xdg-open', url]
 }
 
+/** How long to wait for the opener before assuming it worked and leaving it be. */
+const OPENER_WAIT_MS = 3000
+
 /**
  * Opens a URL in the default browser, with `open` on macOS and `xdg-open`
  * elsewhere.
  *
- * @returns Whether the opener ran and exited with 0; nothing tells whether a
- * browser actually showed the page.
+ * Some openers wait for the browser they started, so one still running after
+ * a few seconds is left running and counted as a success.
+ *
+ * @returns Whether the opener started and did not fail; nothing tells whether
+ * a browser actually showed the page.
  */
 export async function openBrowser(url: string): Promise<boolean> {
   const spawned = Result.try(() => Bun.spawn(opener(url), { stdin: 'ignore', stdout: 'ignore', stderr: 'ignore' }))
   if (spawned.isErr()) return false
-  return (await spawned.value.exited) === 0
+  const child = spawned.value
+  let timer: ReturnType<typeof setTimeout> | undefined
+  const waited = new Promise<true>(resolve => (timer = setTimeout(resolve, OPENER_WAIT_MS, true)))
+  const opened = await Promise.race([child.exited.then(code => code === 0), waited])
+  clearTimeout(timer)
+  child.unref()
+  return opened
 }

@@ -44,14 +44,19 @@ bundle-grep ui                           # serve the search page and open it in 
 Everything lives under `--root`, else `$BUNDLE_GREP_ROOT`, else
 `~/.bundle-grep`: bundles and metadata in `archive/`, and search caches, which
 `restore` can always rebuild, in `cache/`. `search` exits 0 when something
-matched, 1 when nothing did, and 2 on an error. With `--json`, `list` prints a
-JSON array and the other commands one JSON object per line.
+matched, 1 when nothing did, and 2 on an error; any command stopped with
+Ctrl-C exits 130. With `--json`, `list` prints a JSON array and the other
+commands one JSON object per line.
 
 `ui` serves the search page on `127.0.0.1` and opens it in the default
 browser. It also prints the URL, for `--no-open` or a browser that did not
-start, and runs until Ctrl-C. The URL ends in `#token=…`, a secret made for
-that run that the page needs to reach the archive, so open the URL as
-printed. Requests from other sites, or for another host name, are refused.
+start, and runs until Ctrl-C. The URL ends in `#code=…`, which the first page
+to open it trades for that run's secret token, so open it once, as printed;
+a reload keeps working in that tab. Requests from other sites, or for another
+host name, are refused. Other users on the same machine can see the URL in
+the process list while the browser starts, so on a shared machine one of them
+could trade the code first and reach the archive; the page would then say the
+link was already used.
 
 ### Keeping the archive current
 

@@ -9,6 +9,7 @@ import { randomBytes } from 'node:crypto'
 
 import { createApi } from './api/create-api'
 import { errorResponse } from './api/respond'
+import { sessionRoute } from './api/session-route'
 import { ServeError, UiNotBuiltError } from './desktop.errors'
 import type { AppServer, ServeAppError, ServeAppOptions, UiSource } from './desktop.types'
 
@@ -18,8 +19,9 @@ import type { AppServer, ServeAppError, ServeAppOptions, UiSource } from './desk
  * The UI is the one `pnpm build:ui` embedded, or `devServer`'s, proxied so
  * that the page and the API share an origin; without either, it fails with a
  * {@linkcode UiNotBuiltError} before listening. Every request must carry the
- * server's own `Host`. A fresh token is made for this run and handed to the
- * page in the fragment of {@linkcode AppServer.url}. Stopping the server, or
+ * server's own `Host`. A fresh token is made for this run; the fragment of
+ * {@linkcode AppServer.url} holds a one-time code that the page trades for
+ * it at `POST /api/session`. Stopping the server, or
  * `signal`, stops a running sync or restore.
  *
  * @returns The running server, or why it could not start.
@@ -40,6 +42,7 @@ export async function serveApp(options: ServeAppOptions): Promise<Result<AppServ
   const stopped = new AbortController()
   const signal = options.signal ? AbortSignal.any([options.signal, stopped.signal]) : stopped.signal
   const token = randomBytes(32).toString('base64url')
+  const code = randomBytes(32).toString('base64url')
   let handle: (request: Request) => Response | Promise<Response> = () => new Response(null, { status: 503 })
 
   const served = Result.try({
@@ -51,16 +54,18 @@ export async function serveApp(options: ServeAppOptions): Promise<Result<AppServ
   const host = `127.0.0.1:${server.port}`
   const api = createApi({ ...options, host, token, signal })
   const page = uiHandler(ui.value)
+  const session = sessionRoute({ host, code, token })
 
   handle = async (request): Promise<Response> => {
     if (request.headers.get('host') !== host) {
       return errorResponse(403, { _tag: 'ForbiddenError', message: 'Unexpected Host header' })
     }
+    if (new URL(request.url).pathname === '/api/session') return session(request)
     return (await api(request)) ?? page(request)
   }
 
   return Result.ok({
-    url: `http://${host}/#token=${token}`,
+    url: `http://${host}/#code=${code}`,
     stop: async () => {
       stopped.abort()
       await server.stop(true)
@@ -102,14 +107,22 @@ function uiHandler(ui: UiSource): (request: Request) => Response | Promise<Respo
   }
 }
 
-/** Forwards a request for the UI to the dev server, as plain HTTP. */
+/**
+ * Forwards a request for the UI to the dev server, as plain HTTP.
+ *
+ * The target keeps the dev server's origin whatever the path, so `//host/x`
+ * is a path there rather than another host.
+ */
 async function proxy(request: Request, origin: string): Promise<Response> {
   const { pathname, search } = new URL(request.url)
+  const target = new URL(origin)
+  target.pathname = pathname
+  target.search = search
   const headers = new Headers(request.headers)
   headers.delete('host')
   headers.delete('accept-encoding')
   const forwarded = await Result.tryPromise(() =>
-    fetch(new URL(`${pathname}${search}`, origin), {
+    fetch(target, {
       method: request.method,
       headers,
       body: request.method === 'GET' || request.method === 'HEAD' ? undefined : request.body,

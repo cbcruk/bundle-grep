@@ -74,6 +74,7 @@ export function ReposView({ query, repos, onChanged }: ReposViewProps): React.JS
         </div>
       </form>
 
+      {running && <p className="hint">Leaving or reloading this page stops the {running}.</p>}
       {failure && <p className="notice danger">{failure.message}</p>}
       {items && (items.length > 0 || (!running && !failure)) && (
         <ul className="repos-view-outcome">

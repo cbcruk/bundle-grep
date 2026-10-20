@@ -21,13 +21,11 @@ export function thrownError(error: unknown): WireError {
  * @returns The response for a 2xx status.
  */
 export async function request(path: string, options: RequestOptions = {}): Promise<ApiResult<Response>> {
-  const token = apiToken()
-  if (token === undefined) {
-    return { ok: false, error: { _tag: 'ForbiddenError', message: 'This page has no API token; open the URL `bundle-grep ui` printed' } }
-  }
+  const token = await apiToken()
+  if (!token.ok) return token
   const { signal, method = 'GET', body } = options
   try {
-    const headers: Record<string, string> = { 'x-bundle-grep-token': token }
+    const headers: Record<string, string> = { 'x-bundle-grep-token': token.value }
     if (body !== undefined) headers['content-type'] = 'application/json'
     const response = await fetch(path, { method, headers, body: body === undefined ? undefined : JSON.stringify(body), signal })
     if (response.ok) return { ok: true, value: response }
