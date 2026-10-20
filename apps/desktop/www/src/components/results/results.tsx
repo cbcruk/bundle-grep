@@ -72,7 +72,7 @@ export function Results({ query, search, limit, maxLimit, onShowMore, symbolLang
           <>Searching… {plural(items.length, noun)} so far</>
         ) : (
           <>
-            {plural(total, noun)}
+            {done?.capped ? `${total.toLocaleString('en')}+ ${noun}s` : plural(total, noun)}
             {done?.truncated && ` (showing the first ${items.length.toLocaleString('en')})`}
             {done?.stopped === 'timeout' && ' — stopped early because the search took too long'}
           </>

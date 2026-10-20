@@ -158,8 +158,17 @@ export type SearchEvent =
        * file once per commit.
        */
       totalFiles: number
-      /** For `history:`, how many commits matched, beyond any limit. */
+      /**
+       * For `history:`, how many commits matched, beyond any limit, unless
+       * `capped`.
+       */
       totalCommits?: number
+      /**
+       * For `history:`, `true` when histories were not walked to the end
+       * because more commits than the limit had been found, so the totals
+       * and facets are lower bounds.
+       */
+      capped?: true
       /**
        * Grouped counts over the same files as `totalFiles`. For `history:`,
        * repositories count commits.
@@ -231,7 +240,7 @@ export interface SearchOptions<Repo extends SearchRepo = SearchRepo> {
    * definitions per file for `symbol:`. Defaults to `20`.
    */
   maxMatchesPerFile?: number
-  /** Repositories searched at once, at least `1`. Defaults to `4`. */
+  /** Repositories searched at once, at least `1`. Defaults to the number of CPUs, at most `8`. */
   concurrency?: number
   /** Stops the search after this many milliseconds. */
   timeoutMs?: number

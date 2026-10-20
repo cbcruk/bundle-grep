@@ -5,6 +5,7 @@
  */
 
 import { Result } from 'better-result'
+import { availableParallelism } from 'node:os'
 
 import { GitError } from '../git/git.errors'
 import { isEmptyRepo } from '../git/is-empty-repo'
@@ -158,7 +159,10 @@ function count(record: Record<string, number>, key: string): void {
  * A plan with `history:` yields `commit` events instead of `file` events:
  * the commits reachable from `HEAD`, or from the `ref:`, whose added or
  * removed lines match, newest first, each with the matching lines of the
- * files that `path:` and `language:` keep.
+ * files that `path:` and `language:` keep. Since git diffs every commit it
+ * passes, histories are walked only until more commits than the limit were
+ * found across repositories, and repositories not yet started are skipped;
+ * `done` is then `capped`, and its totals are lower bounds.
  *
  * Stopping early — breaking out of the loop, aborting
  * {@linkcode SearchOptions.signal}, or reaching
@@ -185,7 +189,7 @@ export async function* search<Repo extends SearchRepo>(
 ): AsyncGenerator<SearchEvent, void, undefined> {
   const { plan, repos, holds, context = 0, maxMatchesPerFile = 20 } = options
   const limit = Math.max(0, options.limit ?? 100)
-  const concurrency = Math.max(1, options.concurrency ?? 4)
+  const concurrency = Math.max(1, options.concurrency ?? Math.min(8, availableParallelism()))
 
   const finished = new AbortController()
   const timeout = options.timeoutMs === undefined ? undefined : AbortSignal.timeout(options.timeoutMs)
@@ -203,6 +207,9 @@ export async function* search<Repo extends SearchRepo>(
   const facets: SearchFacets = { languages: {}, repos: {}, paths: {} }
   let totalFiles = 0
   let totalCommits = 0
+  let capped = false
+  let historyFound = 0
+  const historyFull = new AbortController()
   let reserved = 0
   let emitted = 0
 
@@ -218,17 +225,34 @@ export async function* search<Repo extends SearchRepo>(
   }
 
   const searchHistory = async (repo: Repo, expr: FileExpr, ref: string, history: HistoryPattern): Promise<void> => {
-    const commits = await matchingCommits({ gitDir: repo.gitDir, ref, history, expr, signal: stop })
+    if (historyFull.signal.aborted) {
+      capped = true
+      return
+    }
+    const found = await matchingCommits({
+      gitDir: repo.gitDir,
+      ref,
+      history,
+      expr,
+      max: limit + 1,
+      enough: historyFull.signal,
+      onCommit: () => {
+        if (++historyFound > limit) historyFull.abort()
+      },
+      signal: stop,
+    })
     if (stop.aborted) return
-    if (commits.isErr()) return failed(repo, commits.error)
+    if (found.isErr()) return failed(repo, found.error)
+    if (!found.value.complete) capped = true
+    const counted = found.value.commits.slice(0, Math.max(1, limit))
 
-    const shown = commits.value.slice(0, Math.max(0, limit - reserved))
+    const shown = counted.slice(0, Math.max(0, limit - reserved))
     reserved += shown.length
     const described = await describeCommits({ gitDir: repo.gitDir, commits: shown, history, maxMatchesPerFile, signal: stop })
     if (stop.aborted) return
     if (described.isErr()) return lost(repo, shown.length, described.error)
 
-    for (const commit of commits.value) {
+    for (const commit of counted) {
       totalCommits++
       count(facets.repos, repo.name)
       for (const path of commit.files) {
@@ -323,11 +347,12 @@ export async function* search<Repo extends SearchRepo>(
     await all
 
     const stopped = options.signal?.aborted ? 'aborted' : timeout?.aborted ? 'timeout' : undefined
-    const truncated = (plan.history ? totalCommits : totalFiles) > emitted
+    const truncated = capped || (plan.history ? totalCommits : totalFiles) > emitted
     yield {
       type: 'done',
       totalFiles,
       ...(plan.history ? { totalCommits } : {}),
+      ...(capped ? { capped } : {}),
       facets,
       truncated,
       ...(stopped ? { stopped } : {}),

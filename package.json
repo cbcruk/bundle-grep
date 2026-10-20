@@ -11,6 +11,7 @@
     "lint": "oxlint",
     "docs:check": "bun scripts/doccheck.ts",
     "test": "bun test",
+    "bench": "bun scripts/bench.ts",
     "dev:ui": "pnpm --filter @bundle-grep/desktop dev",
     "build:ui": "pnpm --filter @bundle-grep/desktop build"
   },

@@ -170,7 +170,9 @@ describe('bundle-grep', () => {
       stderr: '1 commit in 1 repository\n',
     })
     const limited = await cli('search', '--limit', '1', 'history:useState')
-    expect(limited.stderr).toBe('4 commits in 4 repositories, showing 1; raise --limit for more\n')
+    expect(limited.stderr).toMatch(/^[2-4]\+ commits in [2-4] repositories, showing 1; raise --limit for more\n$/)
+    const capped = await cli('search', '--limit', '0', 'history:useState repo:acme/app')
+    expect(capped.stderr).toBe('1+ commits in 1 repository, showing 0; raise --limit for more\n')
     expect(await cli('search', 'history:nothing-here-at-all')).toEqual({ code: 1, stdout: '', stderr: '0 commits in 0 repositories\n' })
   })
 

@@ -1,6 +1,7 @@
 import { describe, expect, test } from 'bun:test'
 
-import { diffPath, parseNameLog, parsePatchLog } from '../../src/search/parse-log'
+import type { LoggedCommit } from '../../src/search/history.types'
+import { createNameLogParser, diffPath, parseNameLog, parsePatchLog } from '../../src/search/parse-log'
 
 describe('parseNameLog', () => {
   test('reads each commit and its files', () => {
@@ -9,6 +10,19 @@ describe('parseNameLog', () => {
     expect(parseNameLog(output)).toEqual([
       { sha: a, files: ['src/a.ts', 'b c.txt'] },
       { sha: b, files: ['x'] },
+    ])
+  })
+
+  test('streams commits as they complete, however the output is split', () => {
+    const [a, b] = ['a'.repeat(40), 'b'.repeat(40)]
+    const seen: LoggedCommit[] = []
+    const parser = createNameLogParser(commit => seen.push(commit))
+    for (const char of `\x1e${a}\0\nx\0y\0\x1e${b}\0\nz\0`) parser.push(char)
+    expect(seen).toEqual([{ sha: a, files: ['x', 'y'] }])
+    parser.end()
+    expect(seen).toEqual([
+      { sha: a, files: ['x', 'y'] },
+      { sha: b, files: ['z'] },
     ])
   })
 

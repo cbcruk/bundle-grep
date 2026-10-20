@@ -128,3 +128,22 @@ describe('narrowingPathspecs', () => {
     expect(narrowingPathspecs(specializePlan(plan.expr, () => true))).toEqual([])
   })
 })
+
+describe('telling text from binary files', () => {
+  test('works for a few named files, names that look like globs, and more files than are named one by one', async () => {
+    const files: Record<string, string> = { 'a*b.txt': 'star\n', '[x].txt': 'bracket\n', 'bin[1].dat': 'x\u0000y' }
+    for (let index = 0; index < 1100; index++) files[`many/f${index}.txt`] = `${index}\n`
+    files['many/blob.bin'] = '\u0000'
+    using many = createFixtureRepo([{ message: 'many', files }])
+    const dir = join(many.root, 'repo.git')
+    runGit(many.root, ['clone', '--quiet', '--bare', many.repo, dir])
+    const list = async (query: string): Promise<string[]> => {
+      const plan = parseQuery(query).andThen(compileQuery).unwrap()
+      return (await listMatchingFiles({ gitDir: dir, expr: specializePlan(plan.expr, () => true) })).unwrap()
+    }
+    expect(await list('path:/[*[]/')).toEqual(['[x].txt', 'a*b.txt'])
+    const all = await list('path:many')
+    expect(all).toHaveLength(1100)
+    expect(all).not.toContain('many/blob.bin')
+  })
+})
