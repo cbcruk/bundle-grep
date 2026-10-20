@@ -16,10 +16,11 @@ import { fileSystem } from '../archive/file-system'
 import { readMetadata, writeMetadata } from '../archive/metadata'
 import type { GitError } from '../git/git.errors'
 import type { GitOutput } from '../git/git.types'
-import { branchesOf, chooseHead, refsDigest } from '../git/refs'
+import { branchesOf, chooseHead, parseRemoteRefs, refsDigest } from '../git/refs'
 import { runGit } from '../git/run-git'
 import { symbolIndex } from '../symbols/symbol-index'
-import type { SyncError, SyncEvent, SyncOptions, SyncOutcome, SyncStatus, SyncTarget } from './sync.types'
+import { acquireSyncLock } from './sync-lock'
+import type { SyncError, SyncEvent, SyncOptions, SyncOutcome, SyncReposOptions, SyncStatus, SyncTarget } from './sync.types'
 
 /** How old a leftover temporary bundle must be before it counts as abandoned. */
 const ABANDONED_AFTER_MS = 60 * 60 * 1000
@@ -33,11 +34,6 @@ const GITHUB_CREDENTIALS = [
   'credential.https://github.com.helper=!gh auth git-credential',
 ]
 
-function parseSymref(output: GitOutput): string | null {
-  const match = /^ref: refs\/heads\/(\S+)\tHEAD$/m.exec(output.stdout.toString('utf8'))
-  return match?.[1] ?? null
-}
-
 function withoutCredentials(url: string): string {
   return url.replace(/^(https?:\/\/)[^/@]*@/i, '$1')
 }
@@ -47,7 +43,10 @@ function withoutCredentials(url: string): string {
  *
  * The mirror at `cacheDir/<owner>/<name>.git` is created on first use and
  * holds every branch and tag; branches and tags deleted upstream are deleted
- * from it, and so from the next bundle. Pull request refs are left out.
+ * from it, and so from the next bundle. Pull request refs are left out. The
+ * remote's refs are listed first, and the fetch is skipped when the mirror
+ * already holds exactly those, which saves a round trip for an unchanged
+ * repository.
  * `HEAD` follows the remote's default branch; when the remote does not name
  * one that exists, it falls back to `main`, `master`, or the first branch.
  *
@@ -62,6 +61,10 @@ function withoutCredentials(url: string): string {
  * and archived flags stay current even when the code has not changed. Last,
  * the symbol index of the default branch is brought up to date with
  * {@linkcode symbolIndex}; if that fails, the next search builds it.
+ *
+ * While it runs, the sync holds the lock file `cacheDir/<owner>/<name>.git.lock`;
+ * a second sync of the same repository fails with
+ * {@linkcode SyncLockedError} instead of racing the first.
  *
  * For `https://github.com/` URLs, git can fall back to `gh` for credentials,
  * replacing the user's own helpers for github.com, so private repositories
@@ -90,22 +93,27 @@ export function syncRepo(target: SyncTarget, options: SyncOptions): Promise<Resu
     const git = (args: string[], allowExitCodes?: number[]): Promise<Result<GitOutput, GitError>> =>
       runGit(args, { cwd: paths.gitDir, env: { ...options.env, GIT_TERMINAL_PROMPT: '0' }, signal: options.signal, allowExitCodes })
 
+    await using _lock = yield* Result.await(acquireSyncLock(`${paths.gitDir}.lock`))
     yield* Result.await(fileSystem(paths.gitDir, () => mkdir(paths.gitDir, { recursive: true })))
     yield* Result.await(git(['init', '--quiet', '--bare', '.']))
-    yield* Result.await(
-      git([
-        ...credentials,
-        'fetch',
-        '--quiet',
-        '--prune',
-        '--no-tags',
-        '--',
-        url,
-        '+refs/heads/*:refs/heads/*',
-        '+refs/tags/*:refs/tags/*',
-      ]),
-    )
-    const remoteHead = parseSymref(yield* Result.await(git([...credentials, 'ls-remote', '--symref', '--', url, 'HEAD'])))
+    const remote = parseRemoteRefs((yield* Result.await(git([...credentials, 'ls-remote', '--symref', '--', url]))).stdout.toString('utf8'))
+    const mirrored = (yield* Result.await(git(['for-each-ref', '--format=%(objectname) %(refname)', 'refs/heads', 'refs/tags']))).stdout
+    if (!sameRefs(mirrored.toString('utf8'), remote.refs)) {
+      yield* Result.await(
+        git([
+          ...credentials,
+          'fetch',
+          '--quiet',
+          '--prune',
+          '--no-tags',
+          '--',
+          url,
+          '+refs/heads/*:refs/heads/*',
+          '+refs/tags/*:refs/tags/*',
+        ]),
+      )
+    }
+    const remoteHead = remote.head
     const refs = (yield* Result.await(git(['for-each-ref', '--format=%(objectname) %(refname)']))).stdout
     const headBranch = chooseHead(remoteHead, branchesOf(refs.toString('utf8')))
     if (headBranch !== undefined) yield* Result.await(git(['symbolic-ref', 'HEAD', `refs/heads/${headBranch}`]))
@@ -160,6 +168,11 @@ export function syncRepo(target: SyncTarget, options: SyncOptions): Promise<Resu
   })
 }
 
+function sameRefs(mirrored: string, remote: readonly string[]): boolean {
+  const lines = mirrored.split('\n').filter(line => line !== '')
+  return lines.length === remote.length && lines.sort().every((line, index) => line === remote[index])
+}
+
 async function bundleHolds(
   bundle: string,
   refs: Buffer,
@@ -206,22 +219,54 @@ async function writeBundle(
   return written
 }
 
+/** How many repositories {@linkcode syncRepos} syncs at once by default; each mostly waits on the network. */
+export const DEFAULT_SYNC_CONCURRENCY = 8
+
 /**
- * Syncs repositories one after another, yielding each one's outcome as it finishes.
+ * Syncs repositories, several at a time, yielding each one's outcome in the order given.
  *
- * A repository that fails yields a `failed` event and the rest carry on.
- * Aborting {@linkcode SyncOptions.signal} stops after the repository in
- * progress, which fails.
+ * Up to {@linkcode SyncReposOptions.concurrency} repositories sync at once,
+ * and an outcome is yielded once every repository before it has been. A
+ * repository that fails yields a `failed` event and the rest carry on.
+ * Aborting {@linkcode SyncOptions.signal} starts no more repositories; those
+ * in progress fail, and their events are still yielded.
  */
 export async function* syncRepos(
   targets: Iterable<SyncTarget>,
-  options: SyncOptions,
+  options: SyncReposOptions,
 ): AsyncGenerator<SyncEvent, void, undefined> {
-  for (const target of targets) {
-    if (options.signal?.aborted) return
-    const outcome = await syncRepo(target, options)
-    yield outcome.isOk()
-      ? { type: 'synced', target, outcome: outcome.value }
-      : { type: 'failed', target, error: outcome.error }
+  const queue = [...targets]
+  const concurrency = Math.max(1, options.concurrency ?? DEFAULT_SYNC_CONCURRENCY)
+  const events: Promise<SyncEvent>[] = []
+  let started = 0
+  let running = 0
+  let wake: (() => void) | undefined
+
+  const run = async (target: SyncTarget): Promise<SyncEvent> => {
+    try {
+      const outcome = await syncRepo(target, options)
+      return outcome.isOk()
+        ? { type: 'synced', target, outcome: outcome.value }
+        : { type: 'failed', target, error: outcome.error }
+    } finally {
+      running--
+      start()
+      wake?.()
+    }
+  }
+  const start = (): void => {
+    while (running < concurrency && started < queue.length && !options.signal?.aborted) {
+      running++
+      events.push(run(queue[started++]!))
+    }
+  }
+
+  start()
+  for (let index = 0; index < queue.length; index++) {
+    while (index >= events.length) {
+      if (running === 0) return
+      await new Promise<void>(resolve => (wake = resolve))
+    }
+    yield await events[index]!
   }
 }

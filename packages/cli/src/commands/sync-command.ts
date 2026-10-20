@@ -4,7 +4,8 @@
  * @module
  */
 
-import { resolveSyncSource, syncRepos, type SyncTarget } from '@bundle-grep/core'
+import { DEFAULT_SYNC_CONCURRENCY, resolveSyncSource, syncRepos, type SyncTarget } from '@bundle-grep/core'
+import { Result } from 'better-result'
 
 import { parseCommandArgs, wholeNumber } from '../args'
 import type { Command, Io } from '../cli.types'
@@ -25,23 +26,35 @@ Sources:
   <path>           a local repository, starting with /, ./, ../ or ~/
 
 Options:
+  --concurrency <n>
+                   repositories to sync at once (default ${DEFAULT_SYNC_CONCURRENCY}; 1 for ssh URLs at a terminal,
+                   so ssh prompts do not interleave)
   --limit <n>      fail for an owner with more repositories than this (default 1000)
   --root <dir>     where the archive lives (default $BUNDLE_GREP_ROOT or ~/.bundle-grep)
   --json           print one JSON object per source or repository
   -h, --help       show this help
 `
 
+function usesSsh(url: string): boolean {
+  return !/^(https?|file):\/\//i.test(url) && !url.startsWith('/')
+}
+
 async function run(args: string[], io: Io): Promise<number> {
   const styles = stylesFor(io.color)
   const errors = stylesFor(io.errorColor)
-  const parsed = parseCommandArgs(args, { limit: { type: 'string' } }).andThen(({ values, positionals }) =>
-    wholeNumber('limit', values.limit, 1000, 1).map(limit => ({ values, positionals, limit })),
+  const parsed = parseCommandArgs(args, { limit: { type: 'string' }, concurrency: { type: 'string' } }).andThen(
+    ({ values, positionals }) =>
+      Result.gen(function* () {
+        const limit = yield* wholeNumber('limit', values.limit, 1000, 1)
+        const concurrency = values.concurrency === undefined ? undefined : yield* wholeNumber('concurrency', values.concurrency, 1, 1)
+        return Result.ok({ values, positionals, limit, concurrency })
+      }),
   )
   if (parsed.isErr()) {
     io.error(`${parsed.error.message}\n\n${USAGE}`)
     return EXIT.error
   }
-  const { values, positionals, limit } = parsed.value
+  const { values, positionals, limit, concurrency } = parsed.value
   if (values.help) {
     io.write(USAGE)
     return EXIT.ok
@@ -70,7 +83,9 @@ async function run(args: string[], io: Io): Promise<number> {
 
   const env = batchSshEnv(io.env, io.interactive, !io.interactive && hasSshCommandConfig())
   const layout = layoutFor(values.root, io.env)
-  for await (const event of syncRepos(targets.values(), { ...layout, env, signal: io.signal })) {
+  const prompts = io.interactive && [...targets.values()].some(target => usesSsh(target.url))
+  const options = { ...layout, env, signal: io.signal, concurrency: concurrency ?? (prompts ? 1 : DEFAULT_SYNC_CONCURRENCY) }
+  for await (const event of syncRepos(targets.values(), options)) {
     const repo = `${event.target.owner}/${event.target.name}`
     if (event.type === 'failed') {
       failed = true

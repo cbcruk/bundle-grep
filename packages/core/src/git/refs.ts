@@ -37,3 +37,24 @@ export function chooseHead(preferred: string | null, branches: readonly string[]
 export function refsDigest(refs: string | Buffer, symref: string): string {
   return createHash('sha256').update(refs).update(`HEAD ${symref}\n`).digest('hex')
 }
+
+/** What `git ls-remote --symref` reports about a remote's branches and tags. */
+export interface RemoteRefs {
+  /** The branch the remote's `HEAD` points to, or `null` when it names none. */
+  head: string | null
+  /** The remote's branches and tags as `<object> <refname>` lines, sorted, without peeled `^{}` entries. */
+  refs: string[]
+}
+
+/** Reads the output of `git ls-remote --symref`, keeping only `HEAD` and the refs a mirror fetches. */
+export function parseRemoteRefs(output: string): RemoteRefs {
+  let head: string | null = null
+  const refs: string[] = []
+  for (const line of output.split('\n')) {
+    const symref = /^ref: refs\/heads\/(\S+)\tHEAD$/.exec(line)
+    if (symref) head = symref[1]!
+    const ref = /^([0-9a-f]+)\t(refs\/(?:heads|tags)\/.+)$/.exec(line)
+    if (ref && !ref[2]!.endsWith('^{}')) refs.push(`${ref[1]} ${ref[2]}`)
+  }
+  return { head, refs: refs.sort() }
+}

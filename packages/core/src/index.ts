@@ -66,7 +66,8 @@ export { restoreRepo, restoreRepos } from './restore/restore-repo'
 export type { RestoreError, RestoreEvent, RestoreOptions, RestoreOutcome, RestoreStatus } from './restore/restore.types'
 export { expandHome } from './sync/expand-home'
 export { resolveSyncSource } from './sync/resolve-sync-source'
-export { syncRepo, syncRepos } from './sync/sync-repo'
+export { SyncLockedError } from './sync/sync.errors'
+export { DEFAULT_SYNC_CONCURRENCY, syncRepo, syncRepos } from './sync/sync-repo'
 export type {
   ResolvedSource,
   ResolveSyncSourceOptions,
@@ -75,6 +76,7 @@ export type {
   SyncEvent,
   SyncOptions,
   SyncOutcome,
+  SyncReposOptions,
   SyncStatus,
   SyncTarget,
 } from './sync/sync.types'

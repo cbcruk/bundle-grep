@@ -8,6 +8,7 @@ import type { FileSystemError, InvalidRepoNameError } from '../archive/archive.e
 import type { ArchiveLayout, ArchivePaths, RepoMetadata } from '../archive/archive.types'
 import type { GitError } from '../git/git.errors'
 import type { GhError } from '../github/github.errors'
+import type { SyncLockedError } from './sync.errors'
 import type { GithubOptions } from '../github/github.types'
 
 /**
@@ -50,6 +51,12 @@ export interface SyncOptions extends ArchiveLayout {
   now?: () => Date
 }
 
+/** Options for {@linkcode syncRepos}. */
+export interface SyncReposOptions extends SyncOptions {
+  /** How many repositories to sync at once; {@linkcode DEFAULT_SYNC_CONCURRENCY} by default. */
+  concurrency?: number
+}
+
 /**
  * What syncing one repository did.
  *
@@ -71,7 +78,7 @@ export interface SyncOutcome {
 }
 
 /** The ways syncing one repository can fail. */
-export type SyncError = GitError | FileSystemError | InvalidRepoNameError
+export type SyncError = GitError | FileSystemError | InvalidRepoNameError | SyncLockedError
 
 /** One step of {@linkcode syncRepos}: a repository that synced, or one that failed. */
 export type SyncEvent =
