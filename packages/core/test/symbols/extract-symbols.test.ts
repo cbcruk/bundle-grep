@@ -210,6 +210,13 @@ describe('qualified names', () => {
       'h',
     ])
     expect(qualified('java', 'class A { void m() { new Runnable() { public void run() {} }; } }')).toEqual(['A', 'A.m', 'run'])
+    expect(qualified('cpp', 'class C { void m() { struct L { int x; }; } };')).toEqual(['C', 'C::m', 'L'])
+    expect(qualified('cpp', 'struct Outer { typedef struct Inner { void f(); } Inner_t; };')).toEqual([
+      'Outer',
+      'Outer::Inner',
+      'Outer::Inner::f',
+      'Outer::Inner_t',
+    ])
   })
 
   test('a C# file-scoped namespace names the declarations after it', () => {
