@@ -4,11 +4,17 @@ import { diffPath, parseNameLog, parsePatchLog } from '../../src/search/parse-lo
 
 describe('parseNameLog', () => {
   test('reads each commit and its files', () => {
-    const output = '\x1eaaa\0\nsrc/a.ts\0b c.txt\0\x1ebbb\0\nx\0'
+    const [a, b] = ['a'.repeat(40), 'b'.repeat(40)]
+    const output = `\x1e${a}\0\nsrc/a.ts\0b c.txt\0\x1e${b}\0\nx\0`
     expect(parseNameLog(output)).toEqual([
-      { sha: 'aaa', files: ['src/a.ts', 'b c.txt'] },
-      { sha: 'bbb', files: ['x'] },
+      { sha: a, files: ['src/a.ts', 'b c.txt'] },
+      { sha: b, files: ['x'] },
     ])
+  })
+
+  test('a path holding the marker byte is still a path', () => {
+    const sha = 'c'.repeat(40)
+    expect(parseNameLog(`\x1e${sha}\0\na\x1eb\0\x1e\0`)).toEqual([{ sha, files: ['a\x1eb', '\x1e'] }])
   })
 
   test('nothing is no commits', () => {
@@ -33,7 +39,8 @@ describe('diffPath', () => {
 })
 
 describe('parsePatchLog', () => {
-  const header = (sha: string, parent: string): string => `\x1e${sha}\0${parent}\x002026-01-01T00:00:00Z\0Me\0subject\0\n`
+  const id = (short: string): string => short.padEnd(40, '0')
+  const header = (sha: string, parent: string): string => `\x1e${id(sha)}\0${parent}\x002026-01-01T00:00:00Z\0Me\0subject\0\n`
 
   test('reads changed lines with their numbers on each side', () => {
     const output =
@@ -42,7 +49,7 @@ describe('parsePatchLog', () => {
       '@@ -2 +2,2 @@\n-old\n+new\n+@@ -9 +9 @@\n@@ -10,0 +12 @@\n+tail\r\n'
     expect(parsePatchLog(output)).toEqual([
       {
-        fields: ['c2', 'c1', '2026-01-01T00:00:00Z', 'Me', 'subject'],
+        fields: [id('c2'), 'c1', '2026-01-01T00:00:00Z', 'Me', 'subject'],
         files: [
           {
             path: 'a.ts',
@@ -74,8 +81,38 @@ describe('parsePatchLog', () => {
     ])
   })
 
+  test('the marker byte inside a changed line or a subject does not start a commit', () => {
+    const output =
+      '\x1e' + 'a'.repeat(40) + '\0\0d\0Me\0sub\x1eject\0\n' +
+      '\ndiff --git a/x b/x\n--- a/x\n+++ b/x\n@@ -0,0 +1 @@\n+x\x1e' + 'b'.repeat(40) + '\0needle\n'
+    const [commit, ...rest] = parsePatchLog(output)
+    expect(rest).toEqual([])
+    expect(commit?.fields[4]).toBe('sub\x1eject')
+    expect(commit?.files[0]?.lines).toEqual([{ change: 'added', number: 1, text: `x\x1e${'b'.repeat(40)}\0needle` }])
+    expect(parsePatchLog('\x1enot a commit')).toEqual([])
+  })
+
+  test('context lines between hunks are counted but not kept', () => {
+    const output =
+      header('c2', 'c1') +
+      '\ndiff --git a/x b/x\n--- a/x\n+++ b/x\n@@ -1,5 +1,5 @@\n-a\n+A\n b\n c\n d\n-e\n+E\n' +
+      'diff --git a/y b/y\n--- a/y\n+++ b/y\n@@ -2 +1,0 @@\n-gone\n'
+    expect(parsePatchLog(output)[0]?.files).toEqual([
+      {
+        path: 'x',
+        lines: [
+          { change: 'removed', number: 1, text: 'a' },
+          { change: 'added', number: 1, text: 'A' },
+          { change: 'removed', number: 5, text: 'e' },
+          { change: 'added', number: 5, text: 'E' },
+        ],
+      },
+      { path: 'y', lines: [{ change: 'removed', number: 2, text: 'gone' }] },
+    ])
+  })
+
   test('a binary file without a patch is left out', () => {
     const output = header('c4', '') + '\ndiff --git a/x.png b/x.png\nBinary files a/x.png and b/x.png differ\n'
-    expect(parsePatchLog(output)).toEqual([{ fields: ['c4', '', '2026-01-01T00:00:00Z', 'Me', 'subject'], files: [] }])
+    expect(parsePatchLog(output)).toEqual([{ fields: [id('c4'), '', '2026-01-01T00:00:00Z', 'Me', 'subject'], files: [] }])
   })
 })

@@ -124,6 +124,22 @@ describe('history:', () => {
   })
 })
 
+describe('history: with unusual repositories', () => {
+  test('a config that merges hunks or a marker byte in a change does not change what is found', async () => {
+    const odd = createFixtureRepo([
+      { message: 'init', files: { 'x.txt': 'a\nb\nc\nd\ne\n', 'y.txt': 'keep\nneedle old\n' } },
+      { message: 'edit', files: { 'x.txt': 'needle A\nb\nc\nd\nneedle E\n', 'y.txt': 'keep\n', 'z.txt': 'x\x1eneedle\n' } },
+    ])
+    fixtures.push(odd)
+    const gitDir = join(odd.root, 'repo.git')
+    runGit(odd.root, ['clone', '--quiet', '--bare', odd.repo, gitDir])
+    runGit(gitDir, ['config', 'diff.interHunkContext', '5'])
+    const events = await collect('history:needle', { repos: [{ name: 'me/odd', gitDir }] })
+    expect(commits(events)).toEqual(['me/odd edit: x.txt +1 +5, y.txt -2, z.txt +1', 'me/odd init: y.txt +2'])
+    expect(done(events)).toMatchObject({ totalCommits: 2 })
+  })
+})
+
 describe('ref:', () => {
   test('searches the files at another ref, naming the commit in each file event', async () => {
     const events = await collect('ref:v1 oldName')

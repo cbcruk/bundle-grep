@@ -6,18 +6,35 @@
 
 import type { LoggedCommit, PatchedCommit, PatchedFile } from './history.types'
 
-/** Separates commits in both formats; git writes it for `%x1e`. */
-export const RECORD = '\x1e'
+/** Starts each commit in both formats; git writes it for `%x1e`. */
+const MARK = '\x1e'
 
-/** Parses `git log --format=%x1e%H --name-only -z` output into commits and their files. */
+/** A full SHA-1 or SHA-256 commit id. */
+const ID = '[0-9a-f]{40}(?:[0-9a-f]{24})?'
+
+/** A whole field holding a commit's marker and id, as pass 1 writes it. */
+const NAME_RECORD = new RegExp(`^\n?${MARK}(${ID})$`)
+
+/**
+ * Where a commit starts in pass 2: the marker at the start of a line,
+ * followed by an id and a NUL, which no patch line can hold.
+ */
+const PATCH_RECORD = new RegExp(`(?:^|\n)${MARK}(?=${ID}\0)`)
+
+/**
+ * Parses `git log --format=%x1e%H --name-only -z` output into commits and their files.
+ *
+ * The output is read field by field, so a path holding the marker byte is
+ * still read as a path.
+ */
 export function parseNameLog(output: string): LoggedCommit[] {
-  return output
-    .split(RECORD)
-    .filter(record => record !== '')
-    .map(record => {
-      const [sha = '', ...files] = record.split('\0')
-      return { sha, files: files.map(file => file.replace(/^\n/, '')).filter(file => file !== '') }
-    })
+  const commits: LoggedCommit[] = []
+  for (const field of output.split('\0')) {
+    const sha = NAME_RECORD.exec(field)?.[1]
+    if (sha) commits.push({ sha, files: [] })
+    else if (field.replace(/^\n/, '') !== '') commits.at(-1)?.files.push(field.replace(/^\n/, ''))
+  }
+  return commits
 }
 
 const ESCAPES: Readonly<Record<string, number>> = { a: 7, b: 8, t: 9, n: 10, v: 11, f: 12, r: 13, '"': 34, '\\': 92 }
@@ -60,14 +77,19 @@ export function diffPath(raw: string): string | undefined {
  * describes.
  *
  * Hunks are read by the line counts in their headers, so a changed line that
- * looks like a header is still read as a line.
+ * looks like a header is still read as a line, and context lines, which git
+ * adds between nearby hunks under `diff.interHunkContext`, are counted but
+ * not kept. Commits are split only where a line starts with the marker and a
+ * commit id, so the marker byte inside a changed line or a subject is kept
+ * as text; a record too short to hold the format's fields is left out.
  */
 export function parsePatchLog(output: string): PatchedCommit[] {
   const commits: PatchedCommit[] = []
-  for (const record of output.split(RECORD)) {
-    if (record === '') continue
+  for (const record of output.split(PATCH_RECORD)) {
     const parts = record.split('\0')
-    const fields = parts.slice(0, 5) as PatchedCommit['fields']
+    if (parts.length < 6) continue
+    const [sha, parents, date, author, subject] = parts as [string, string, string, string, string]
+    const fields: PatchedCommit['fields'] = [sha, parents, date, author, subject]
     const files: PatchedFile[] = []
     const lines = parts.slice(5).join('\0').split('\n')
     let file: PatchedFile | undefined
@@ -86,6 +108,11 @@ export function parsePatchLog(output: string): PatchedCommit[] {
         } else if (line.startsWith('+') && added > 0) {
           file?.lines.push({ change: 'added', number: newLine++, text })
           added--
+        } else if (line.startsWith(' ')) {
+          oldLine++
+          newLine++
+          removed = Math.max(0, removed - 1)
+          added = Math.max(0, added - 1)
         }
         continue
       }

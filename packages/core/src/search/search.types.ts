@@ -128,7 +128,7 @@ export type SearchEvent =
        * on its path alone.
        */
       lines: SearchLine[]
-      /** The commit searched, when the query named a `ref:`; `HEAD` otherwise. */
+      /** The commit searched, as a full id, when the query named a `ref:`; absent otherwise. */
       commit?: string
     }
   | {
