@@ -126,9 +126,10 @@ files under 1 MiB. `sync` and `restore` index each repository's default
 branch, and a search indexes one it finds without an index; an index only
 parses the files that changed since the last one.
 
-A definition inside a class, struct, interface, enum, trait, module or
-namespace is also known by the names around it, as is a Go method by its
-receiver and a Rust one by its `impl`. A `symbol:` value with a `.` or `::`
+A definition directly inside a class, struct, interface, enum, trait, module
+or namespace, C#'s file-scoped `namespace N;` included, is also known by the
+names around it, as is a Go method by its receiver and a Rust one by its
+`impl`; a definition local to a function is not. A `symbol:` value with a `.` or `::`
 in it matches the end of such a name, so `symbol:Maint.deleteRows` finds the
 `deleteRows` method of `Maint` and not other `deleteRows`. Either separator
 works in any language, as do regular expressions:

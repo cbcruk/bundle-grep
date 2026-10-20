@@ -46,14 +46,28 @@ function isInside(node: Node, type: string): boolean {
   return false
 }
 
-/** Reads a type written as a scope, dropping pointer and reference marks, generic arguments and spaces, so `*Set[T]` reads `Set`. */
+/** A C# `namespace N;`, which names every declaration after it in the file rather than ones inside it. */
+const FILE_SCOPED = 'file_scoped_namespace_declaration'
+
+/** Marks before a type that do not name it: pointers, references, lifetimes, and `mut`, `const` or `dyn`. */
+const TYPE_PREFIX = /^(?:[*&]\s*|'\w+\s*|(?:mut|const|dyn)\s+)/
+
+/**
+ * Reads a type written as a scope, so `*Set[T]` and `&'a mut Foo<T>` read `Set` and `Foo`.
+ *
+ * Drops pointer and reference marks, lifetimes, generic arguments, trait
+ * bounds after a `+`, a Rust path's leading `crate`, `self` or `super`, and
+ * spaces.
+ */
 function scopeName(text: string): string {
-  let name = text.replace(/^[*&\s]+(mut\s+)?/, '').replace(/\s+/g, '')
+  let name = text.trim()
+  while (TYPE_PREFIX.test(name)) name = name.replace(TYPE_PREFIX, '')
+  name = name.replace(/\s+/g, '')
   for (let previous = ''; previous !== name; ) {
     previous = name
     name = name.replace(/<[^<>]*>|\[[^[\]]*\]/g, '')
   }
-  return name
+  return name.replace(/\+.*$/, '').replace(/^(?:(?:crate|self|super)::)+/, '')
 }
 
 /** Follows a C++ `A::B::c` declarator down to the name it ends in. */
@@ -74,21 +88,33 @@ function writtenScopes(name: Node): string[] {
   return scopes
 }
 
-/** Names each definition after the definitions around it, its own `@scope`, and the scopes written before its name. */
+/**
+ * Names each definition after the definitions around it, its own `@scope`, and the scopes written before its name.
+ *
+ * Only the nearest enclosing definition counts, and only when it is a
+ * container: a function inside a method is local to it, not a member of the
+ * class. Outside any definition, a C# file-scoped namespace before it counts.
+ */
 function qualify(found: readonly Found[], separator: string): Map<Found, string> {
-  const containers = new Map<number, Found>()
-  for (const entry of found) if (CONTAINERS.has(entry.kind)) containers.set(entry.definition.id, entry)
+  const byNode = new Map<number, Found>()
+  for (const entry of found) byNode.set(entry.definition.id, entry)
+  const fileScoped = found.find(entry => entry.definition.type === FILE_SCOPED)
   const qualified = new Map<Found, string>()
+  const enclosing = (entry: Found): Found | null | undefined => {
+    for (let parent = entry.definition.parent; parent; parent = parent.parent) {
+      const around = byNode.get(parent.id)
+      if (around && around !== entry) return CONTAINERS.has(around.kind) ? around : null
+    }
+    return undefined
+  }
   const qualifiedOf = (entry: Found): string => {
     const known = qualified.get(entry)
     if (known !== undefined) return known
     const parts: string[] = []
-    for (let parent = entry.definition.parent; parent; parent = parent.parent) {
-      const container = containers.get(parent.id)
-      if (container && container !== entry) {
-        parts.push(qualifiedOf(container))
-        break
-      }
+    const around = enclosing(entry)
+    if (around) parts.push(qualifiedOf(around))
+    else if (around === undefined && fileScoped && fileScoped !== entry && fileScoped.definition.startIndex < entry.definition.startIndex) {
+      parts.push(qualifiedOf(fileScoped))
     }
     if (entry.scope) parts.push(entry.scope)
     parts.push(...writtenScopes(entry.name), entry.name.text)
