@@ -11,6 +11,7 @@ import { searchCommand } from './commands/search-command'
 import { syncCommand } from './commands/sync-command'
 import { uiCommand } from './commands/ui-command'
 import { EXIT } from './exit-codes'
+import { VERSION } from './version'
 
 const COMMANDS: readonly Command[] = [syncCommand, restoreCommand, searchCommand, listCommand, uiCommand]
 
@@ -18,6 +19,10 @@ const USAGE = `Usage: bundle-grep <command> [options]
 
 Commands:
 ${COMMANDS.map(command => `  ${command.name.padEnd(9)} ${command.summary}`).join('\n')}
+
+Options:
+  -h, --help     show this help
+  -v, --version  print the version
 
 Run \`bundle-grep <command> --help\` for a command's options.
 `
@@ -47,6 +52,10 @@ export async function run(argv: string[], io: Io): Promise<number> {
   const [name, ...args] = argv
   if (name === '-h' || name === '--help' || name === 'help') {
     io.write(USAGE)
+    return EXIT.ok
+  }
+  if (name === '-v' || name === '--version') {
+    io.write(`bundle-grep ${VERSION}\n`)
     return EXIT.ok
   }
   const command = COMMANDS.find(candidate => candidate.name === name)

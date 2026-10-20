@@ -90,6 +90,12 @@ describe('bundle-grep', () => {
     expect((await cli()).code).toBe(2)
   })
 
+  test('prints the version from the package manifest', async () => {
+    const { version } = JSON.parse(readFileSync(join(import.meta.dir, '../package.json'), 'utf8')) as { version: string }
+    expect(await cli('--version')).toEqual({ code: 0, stdout: `bundle-grep ${version}\n`, stderr: '' })
+    expect((await cli('-v')).stdout).toBe(`bundle-grep ${version}\n`)
+  })
+
   test('sync reports unchanged repositories on a second run', async () => {
     const again = await cli('sync', 'acme')
     expect(again).toEqual({ code: 0, stdout: 'unchanged acme/app\nunchanged acme/fork\n', stderr: '' })

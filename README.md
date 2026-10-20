@@ -4,12 +4,30 @@ Archive your git repositories as bundles and search them with
 [GitHub code search](https://github.com/search) syntax, run locally through
 `git grep`.
 
-> Work in progress. See the [roadmap](https://github.com/cbcruk/bundle-grep/issues/14).
+## Install
+
+Each [release](https://github.com/cbcruk/bundle-grep/releases) has a
+self-contained binary for macOS and Linux, on arm64 and x64, with a
+`SHA256SUMS` file. Download one with `gh`, check it, and put `bundle-grep` on
+your `PATH`:
+
+```sh
+gh release download --repo cbcruk/bundle-grep --pattern '*-darwin-arm64.tar.gz' --pattern SHA256SUMS
+shasum -a 256 --check --ignore-missing SHA256SUMS
+tar -xzf bundle-grep-*-darwin-arm64.tar.gz
+mv bundle-grep ~/.local/bin/
+bundle-grep --version
+```
+
+The binaries are not signed. macOS blocks a binary downloaded through a
+browser until you clear its quarantine flag with
+`xattr -d com.apple.quarantine bundle-grep`; `gh` and `curl` do not set it.
 
 ## Usage
 
-Requires [Bun](https://bun.com), git, and, for GitHub sources, a logged-in
-[`gh`](https://cli.github.com).
+Requires git, and, for GitHub sources, a logged-in
+[`gh`](https://cli.github.com). Running from a checkout instead of a release
+binary also requires [Bun](https://bun.com).
 
 ```sh
 bundle-grep sync cbcruk                  # every repository of a user or organisation
@@ -93,6 +111,11 @@ bun build --compile packages/cli/src/main.ts --outfile bundle-grep
 pnpm dev:ui                                            # Vite on 127.0.0.1:5173
 bun packages/cli/src/main.ts ui --dev-server http://127.0.0.1:5173
 ```
+
+`scripts/smoke-test.sh <binary> [version]` runs a compiled binary end to end
+against a throwaway repository. Pushing a tag `v<version>` that matches
+`packages/cli/package.json` builds every target, smoke-tests the ones a hosted
+runner can execute, and publishes them as a GitHub release.
 
 `pnpm bench --dir <directory of bare repositories>` times searches at 10, 100
 and 500 repositories; [docs/performance.md](docs/performance.md) has the
