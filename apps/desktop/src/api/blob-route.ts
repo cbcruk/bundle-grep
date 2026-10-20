@@ -29,7 +29,7 @@ function segmentsOf(pathname: string): string[] | undefined {
  * The ref is one path segment, such as `HEAD` or a commit id, so a branch
  * name with a slash cannot be used; the path is the rest. The body is always
  * `application/octet-stream` with a `sandbox` content security policy, so a
- * repository's HTML or SVG never runs on the app's origin even if the window
+ * repository's HTML or SVG never runs on the app's origin even if the browser
  * is pointed at it.
  */
 export async function blobRoute(request: Request, layout: ArchiveLayout): Promise<Response> {

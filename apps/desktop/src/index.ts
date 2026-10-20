@@ -1,29 +1,33 @@
 /**
- * The bundle-grep desktop app: a barlo window over a local-only search
- * server.
+ * The bundle-grep search page: a local-only server for the API and the UI,
+ * opened in the user's browser.
  *
  * @module
  */
 
 export { createApi } from './api/create-api'
 export { TOKEN_HEADER } from './api/guard'
-export { createBridge } from './bridge/create-bridge'
-export { UiNotBuiltError } from './desktop.errors'
+export { ServeError, UiNotBuiltError } from './desktop.errors'
 export type {
+  ApiHandler,
   ApiOptions,
+  ApiResult,
+  AppServer,
+  ArchiveRouteOptions,
   ArchiveSummary,
-  Bridge,
-  BridgeOptions,
-  BridgeResult,
-  OpenAppError,
-  OpenAppOptions,
+  JobRouteOptions,
+  JobStreamEvent,
   RepoList,
   RepoRow,
   RepoState,
   RestoreItem,
   SearchStreamEvent,
+  ServeAppError,
+  ServeAppOptions,
   Settings,
   SyncItem,
+  SyncRequest,
   WireError,
 } from './desktop.types'
-export { openApp } from './open-app'
+export { openBrowser } from './open-browser'
+export { serveApp } from './serve-app'

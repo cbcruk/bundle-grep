@@ -19,16 +19,8 @@ import { Result } from 'better-result'
 
 import type { ArchiveSummary, SearchRouteOptions, SearchStreamEvent } from '../desktop.types'
 import { toWireError } from '../wire-error'
+import { ndjsonResponse } from './ndjson-response'
 import { errorResponse } from './respond'
-
-/**
- * How long the stream may go quiet before a heartbeat line is sent. Bun
- * closes a connection that sends nothing for 10 seconds, and a regex over a
- * large archive can take longer than that between results.
- */
-const DEFAULT_HEARTBEAT_MS = 5000
-
-const HEARTBEAT = lineOf({ type: 'heartbeat' })
 
 const MAX_LIMIT = 1000
 
@@ -41,10 +33,6 @@ function wholeNumber(params: URLSearchParams, name: string, fallback: number, ma
     return Result.err(errorResponse(400, { _tag: 'UsageError', message: `${name} must be a whole number up to ${max}, not "${raw}"` }))
   }
   return Result.ok(Number(raw))
-}
-
-function lineOf(event: SearchStreamEvent): string {
-  return `${JSON.stringify(event)}\n`
 }
 
 function wireEvent(event: SearchEvent): SearchStreamEvent {
@@ -68,7 +56,7 @@ function wireEvent(event: SearchEvent): SearchStreamEvent {
  * Closing the connection stops the search and kills its git processes.
  */
 export async function searchRoute(request: Request, options: SearchRouteOptions): Promise<Response> {
-  const { layout, heartbeatMs = DEFAULT_HEARTBEAT_MS } = options
+  const { layout, heartbeatMs } = options
   const params = new URL(request.url).searchParams
   const query = params.get('q') ?? ''
   if (query.trim() === '') return errorResponse(400, { _tag: 'UsageError', message: 'q is required' })
@@ -92,45 +80,18 @@ export async function searchRoute(request: Request, options: SearchRouteOptions)
   if (loaded.isErr()) return errorResponse(500, toWireError(loaded.error))
   const { repos, unrestored, invalid } = loaded.value
 
+  const { limit, context } = numbers.value
   const stop = new AbortController()
   const signal = AbortSignal.any([request.signal, stop.signal])
-  const events = search({ plan, repos, holds: repoHolds, ...numbers.value, signal })
-  const encoder = new TextEncoder()
   const archive: ArchiveSummary = {
     type: 'archive',
     repos: repos.length,
     unrestored: unrestored.map(entry => `${entry.owner}/${entry.name}`),
     invalid: invalid.map(error => error.message),
   }
-  let started = false
-  let pending: Promise<IteratorResult<SearchEvent, void>> | undefined
-
-  const body = new ReadableStream<Uint8Array>({
-    async pull(controller): Promise<void> {
-      if (!started) {
-        started = true
-        controller.enqueue(encoder.encode(lineOf(archive)))
-        return
-      }
-      pending ??= events.next()
-      let timer: ReturnType<typeof setTimeout> | undefined
-      const beat = new Promise<'heartbeat'>(resolve => (timer = setTimeout(resolve, heartbeatMs, 'heartbeat')))
-      const next = await Promise.race([pending, beat])
-      clearTimeout(timer)
-      if (next === 'heartbeat') {
-        controller.enqueue(encoder.encode(HEARTBEAT))
-        return
-      }
-      pending = undefined
-      if (next.done) controller.close()
-      else controller.enqueue(encoder.encode(lineOf(wireEvent(next.value))))
-    },
-    async cancel(): Promise<void> {
-      stop.abort()
-      await events.return(undefined)
-    },
-  })
-  return new Response(body, {
-    headers: { 'content-type': 'application/x-ndjson; charset=utf-8', 'cache-control': 'no-store' },
-  })
+  async function* lines(): AsyncGenerator<SearchStreamEvent, void> {
+    yield archive
+    for await (const event of search({ plan, repos, holds: repoHolds, limit, context, signal })) yield wireEvent(event)
+  }
+  return ndjsonResponse(lines(), { heartbeatMs, onCancel: () => stop.abort() })
 }

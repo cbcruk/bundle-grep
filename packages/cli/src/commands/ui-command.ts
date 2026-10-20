@@ -1,5 +1,5 @@
 /**
- * The `ui` command: opens the desktop search window.
+ * The `ui` command: serves the search page and opens it in the browser.
  *
  * @module
  */
@@ -16,19 +16,31 @@ import { batchSshEnv, hasSshCommandConfig } from '../ssh-env'
 
 const USAGE = `Usage: bundle-grep ui [options]
 
-Opens the search window in a Chrome app window, served from 127.0.0.1 only.
-Needs a local Chrome, Chromium, Edge or Brave; set BARLO_CHROME_PATH to pick one.
-Returns when the window closes.
+Serves the search page from 127.0.0.1 only, prints its URL and opens it in the
+default browser. The URL carries a token that changes every run. Runs until
+Ctrl-C.
 
 Options:
+  --port <n>          listen on this port (default any free one)
+  --no-open           print the URL without opening a browser
   --dev-server <url>  load the UI from a dev server, such as http://localhost:5173
   --root <dir>        where the archive lives (default $BUNDLE_GREP_ROOT or ~/.bundle-grep)
   -h, --help          show this help
 `
 
+function portOf(text: string): number | null {
+  if (!/^\d+$/.test(text)) return null
+  const port = Number(text)
+  return port >= 1 && port <= 65535 ? port : null
+}
+
 async function run(args: string[], io: Io): Promise<number> {
   const errors = stylesFor(io.errorColor)
-  const parsed = parseCommandArgs(args, { 'dev-server': { type: 'string' } })
+  const parsed = parseCommandArgs(args, {
+    'dev-server': { type: 'string' },
+    port: { type: 'string' },
+    'no-open': { type: 'boolean' },
+  })
   if (parsed.isErr()) {
     io.error(`${parsed.error.message}\n\n${USAGE}`)
     return EXIT.error
@@ -48,30 +60,38 @@ async function run(args: string[], io: Io): Promise<number> {
     return EXIT.error
   }
 
-  const { openApp } = await import('@bundle-grep/desktop')
+  const port = values.port === undefined ? undefined : portOf(values.port)
+  if (port === null) {
+    io.error(`--port must be a whole number from 1 to 65535, not "${values.port}"\n\n${USAGE}`)
+    return EXIT.error
+  }
+
+  const { openBrowser, serveApp } = await import('@bundle-grep/desktop')
   const layout = layoutFor(values.root, io.env)
-  const opened = await openApp({
+  const served = await serveApp({
     layout,
     root: dirname(layout.archiveDir),
     gh: io.gh,
     syncEnv: batchSshEnv(io.env, false, hasSshCommandConfig()),
     devServer,
+    port,
     signal: io.signal,
   })
-  if (opened.isErr()) {
-    io.error(formatNotice('error', opened.error.message, errors))
+  if (served.isErr()) {
+    io.error(formatNotice('error', served.error.message, errors))
     return EXIT.error
   }
-  const app = opened.value
-  if (io.signal?.aborted) app.exit()
-  if (!app.exited) {
-    await new Promise<void>(resolve => {
-      app.onExit(resolve)
-      io.signal?.addEventListener('abort', () => app.exit(), { once: true })
-    })
+  const server = served.value
+  io.write(`bundle-grep is serving ${server.url}\nPress Ctrl-C to stop.\n`)
+  if (!values['no-open'] && !(await openBrowser(server.url))) {
+    io.error(formatNotice('warning', 'Could not open a browser; open the URL above', errors))
   }
+  if (!io.signal?.aborted) {
+    await new Promise<void>(resolve => io.signal?.addEventListener('abort', () => resolve(), { once: true }))
+  }
+  await server.stop()
   return EXIT.ok
 }
 
 /** `bundle-grep ui`. */
-export const uiCommand: Command = { name: 'ui', summary: 'open the search window', usage: USAGE, run }
+export const uiCommand: Command = { name: 'ui', summary: 'serve the search page in the browser', usage: USAGE, run }
