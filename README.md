@@ -47,6 +47,29 @@ Everything lives under `--root`, else `$BUNDLE_GREP_ROOT`, else
 matched, 1 when nothing did, and 2 on an error. With `--json`, `list` prints a
 JSON array and the other commands one JSON object per line.
 
+### Keeping the archive current
+
+`sync` syncs 8 repositories at a time (`--concurrency`), or one at a time for
+ssh URLs at a terminal, so that ssh prompts do not interleave. Before fetching
+a repository it lists the remote's branches and tags, and it skips the fetch
+when the cache already holds exactly those, so rerunning `sync` over an
+unchanged account costs one round trip per repository. A sync locks each
+repository it updates, and a second sync of the same repository fails rather
+than racing it, so overlapping scheduled runs are safe.
+
+To run it on a schedule, give the scheduler a binary on an absolute path and a
+`gh` it can find. With cron, for example, every night at 3:00:
+
+```cron
+0 3 * * * PATH=/opt/homebrew/bin:/usr/bin:/bin $HOME/.local/bin/bundle-grep sync cbcruk --json >> $HOME/.bundle-grep/sync.log 2>&1
+```
+
+On macOS, a launchd agent in `~/Library/LaunchAgents` runs
+`bundle-grep sync <source> --json` the same way, with
+`StartCalendarInterval` for the time. Nobody is at the terminal then, so ssh
+runs in batch mode and fails rather than prompting. The exit code is 1 when
+some repository failed, and each failure is a `failed` line in the log.
+
 ### Query syntax
 
 Queries follow

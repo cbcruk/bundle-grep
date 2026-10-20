@@ -2,7 +2,7 @@ import { describe, expect, test } from 'bun:test'
 import { existsSync, mkdirSync, readFileSync, statSync, utimesSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 
-import { readMetadata, syncRepo, syncRepos } from '../../src'
+import { readMetadata, SyncLockedError, syncRepo, syncRepos } from '../../src'
 import type { SyncOptions, SyncTarget } from '../../src'
 import { createFixtureRepo, isolateGitConfig, runGit } from '../fixture'
 import type { FixtureRepo } from '../fixture'
@@ -196,6 +196,55 @@ describe('syncRepo', () => {
     expect(readFileSync(outcome.unwrap().paths.metadata, 'utf8')).not.toContain('user')
   })
 
+  test('skips the fetch while the mirror already holds the remote refs', async () => {
+    using fixture = createFixtureRepo(FIRST)
+    fixture.git('tag', '-a', 'v1', '-m', 'annotated')
+    const { options, target } = setup(fixture)
+    const trace = join(fixture.root, 'trace')
+    const fetches = (): number => (readFileSync(trace, 'utf8').match(/built-in: git fetch/g) ?? []).length
+    const traced = { ...options, env: { GIT_TRACE: trace } }
+
+    expect((await syncRepo(target, traced)).unwrap().status).toBe('created')
+    expect(fetches()).toBe(1)
+    expect((await syncRepo(target, traced)).unwrap().status).toBe('unchanged')
+    expect(fetches()).toBe(1)
+
+    fixture.git('tag', '-f', 'v1', '-a', '-m', 'moved')
+    expect((await syncRepo(target, traced)).unwrap().status).toBe('updated')
+    fixture.git('tag', '-d', 'v1')
+    expect((await syncRepo(target, traced)).unwrap().status).toBe('updated')
+    expect(fetches()).toBe(3)
+  })
+
+  test('fails instead of racing another sync of the same repository', async () => {
+    using fixture = createFixtureRepo(FIRST)
+    const { options, target } = setup(fixture)
+
+    const results = await Promise.all([syncRepo(target, options), syncRepo(target, options)])
+
+    expect(results.filter(result => result.isOk())).toHaveLength(1)
+    const locked = results.find(result => result.isErr())
+    expect(locked?.isErr() && locked.error).toBeInstanceOf(SyncLockedError)
+    expect(existsSync(join(options.cacheDir, 'acme', 'widgets.git.lock'))).toBe(false)
+    expect((await syncRepo(target, options)).isOk()).toBe(true)
+  })
+
+  test('takes over a lock left by a process that is gone', async () => {
+    using fixture = createFixtureRepo(FIRST)
+    const { options, target } = setup(fixture)
+    const lock = join(options.cacheDir, 'acme', 'widgets.git.lock')
+    mkdirSync(join(options.cacheDir, 'acme'), { recursive: true })
+    const gone = Bun.spawnSync(['true']).pid
+    writeFileSync(lock, `${gone}\n`)
+
+    expect((await syncRepo(target, options)).unwrap().status).toBe('created')
+    expect(existsSync(lock)).toBe(false)
+
+    writeFileSync(lock, 'not a pid\n')
+    const held = await syncRepo(target, options)
+    expect(held.isErr() && held.error._tag).toBe('SyncLockedError')
+  })
+
   test('passes extra environment to git', async () => {
     using fixture = createFixtureRepo(FIRST)
     const { options, target } = setup(fixture)
@@ -277,17 +326,38 @@ describe('syncRepos', () => {
     ])
   })
 
-  test('stops before the next repository once aborted', async () => {
+  test('yields outcomes in the order given while syncing several at once', async () => {
+    using fixture = createFixtureRepo(FIRST)
+    const { options, target } = setup(fixture)
+    const names = ['a', 'b', 'c', 'd', 'e']
+    const targets = names.map(name => ({ ...target, name, url: name === 'c' ? join(fixture.root, 'missing') : fixture.repo }))
+
+    const events = []
+    for await (const event of syncRepos(targets, { ...options, concurrency: 3 })) events.push(event)
+
+    expect(events.map(event => [event.target.name, event.type])).toEqual([
+      ['a', 'synced'],
+      ['b', 'synced'],
+      ['c', 'failed'],
+      ['d', 'synced'],
+      ['e', 'synced'],
+    ])
+  })
+
+  test('starts nothing more once aborted, but yields what was in progress', async () => {
     using fixture = createFixtureRepo(FIRST)
     const { options, target } = setup(fixture)
     const controller = new AbortController()
+    const targets = ['a', 'b', 'c', 'd', 'e', 'f'].map(name => ({ ...target, name }))
 
     const events = []
-    for await (const event of syncRepos([target, { ...target, name: 'second' }], { ...options, signal: controller.signal })) {
+    for await (const event of syncRepos(targets, { ...options, concurrency: 2, signal: controller.signal })) {
       events.push(event)
       controller.abort()
     }
 
-    expect(events.map(event => event.target.name)).toEqual(['widgets'])
+    expect(events.length).toBeGreaterThanOrEqual(2)
+    expect(events.length).toBeLessThan(targets.length)
+    expect(events.map(event => event.target.name)).toEqual(targets.slice(0, events.length).map(t => t.name))
   })
 })

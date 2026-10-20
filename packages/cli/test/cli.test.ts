@@ -101,6 +101,17 @@ describe('bundle-grep', () => {
     expect(again).toEqual({ code: 0, stdout: 'unchanged acme/app\nunchanged acme/fork\n', stderr: '' })
   })
 
+  test('sync takes a concurrency of at least 1', async () => {
+    expect(await cli('sync', '--concurrency', '1', 'acme')).toEqual({
+      code: 0,
+      stdout: 'unchanged acme/app\nunchanged acme/fork\n',
+      stderr: '',
+    })
+    const zero = await cli('sync', '--concurrency', '0', 'acme')
+    expect(zero.code).toBe(2)
+    expect(zero.stderr).toStartWith('--concurrency must be a whole number of at least 1')
+  })
+
   test('sync --json prints one object per repository, and fails for a source it cannot resolve', async () => {
     const synced = await cli('sync', '--json', 'acme', '/')
     expect(synced.code).toBe(1)
