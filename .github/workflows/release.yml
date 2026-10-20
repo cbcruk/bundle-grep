@@ -4,7 +4,7 @@ on:
   push:
     tags: ['v*']
   pull_request:
-    paths: [.github/workflows/release.yml, scripts/smoke-test.sh, packages/cli/package.json]
+    paths: [.github/workflows/release.yml, scripts/smoke-test.sh, packages/**, apps/**, pnpm-lock.yaml]
   workflow_dispatch:
 
 permissions:
@@ -19,9 +19,10 @@ jobs:
 
       - uses: pnpm/action-setup@v4
 
+      # Pinned so a tag always ships the runtime it was verified with.
       - uses: oven-sh/setup-bun@v2
         with:
-          bun-version: latest
+          bun-version: 1.4.0
 
       - run: pnpm install --frozen-lockfile
 
@@ -35,17 +36,23 @@ jobs:
           fi
           echo "version=$version" >> "$GITHUB_OUTPUT"
 
+      - name: Check
+        run: pnpm typecheck && pnpm lint && pnpm docs:check && pnpm test
+
       - name: Build UI
         run: pnpm build:ui
 
       # Bun cross-compiles every target from one runner; the smoke job then
-      # runs the binaries a hosted runner can execute.
+      # runs the binaries a hosted runner can execute. The x64 builds use
+      # Bun's baseline runtime, which does not need AVX2.
       - name: Compile
         run: |
           mkdir -p out
           for target in darwin-arm64 darwin-x64 linux-x64 linux-arm64; do
             mkdir -p "build/$target"
-            bun build --compile --minify --target="bun-$target" packages/cli/src/main.ts --outfile "build/$target/bundle-grep"
+            runtime=$target
+            if [[ $target == *-x64 ]]; then runtime=$target-baseline; fi
+            bun build --compile --target="bun-$runtime" packages/cli/src/main.ts --outfile "build/$target/bundle-grep"
             tar -czf "out/bundle-grep-v${{ steps.version.outputs.version }}-$target.tar.gz" -C "build/$target" bundle-grep
           done
           cd out && sha256sum *.tar.gz > SHA256SUMS
@@ -100,4 +107,7 @@ jobs:
       - name: Publish
         env:
           GH_TOKEN: ${{ github.token }}
-        run: gh release create "$GITHUB_REF_NAME" out/* --repo "$GITHUB_REPOSITORY" --title "$GITHUB_REF_NAME" --generate-notes --verify-tag
+        run: |
+          prerelease=()
+          if [[ $GITHUB_REF_NAME == *-* ]]; then prerelease=(--prerelease); fi
+          gh release create "$GITHUB_REF_NAME" out/* --repo "$GITHUB_REPOSITORY" --title "$GITHUB_REF_NAME" --generate-notes --verify-tag "${prerelease[@]}"

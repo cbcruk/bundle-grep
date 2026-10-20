@@ -7,15 +7,17 @@ Archive your git repositories as bundles and search them with
 ## Install
 
 Each [release](https://github.com/cbcruk/bundle-grep/releases) has a
-self-contained binary for macOS and Linux, on arm64 and x64, with a
-`SHA256SUMS` file. Download one with `gh`, check it, and put `bundle-grep` on
-your `PATH`:
+self-contained binary for macOS and Linux (glibc), on arm64 and x64, with a
+`SHA256SUMS` file. Download the one for your platform — `darwin-arm64`,
+`darwin-x64`, `linux-x64` or `linux-arm64` — with `gh` into an empty
+directory, check it, and put `bundle-grep` on your `PATH`:
 
 ```sh
+cd "$(mktemp -d)"
 gh release download --repo cbcruk/bundle-grep --pattern '*-darwin-arm64.tar.gz' --pattern SHA256SUMS
-shasum -a 256 --check --ignore-missing SHA256SUMS
-tar -xzf bundle-grep-*-darwin-arm64.tar.gz
-mv bundle-grep ~/.local/bin/
+shasum -a 256 --check --ignore-missing SHA256SUMS   # sha256sum --check --ignore-missing on Linux
+tar -xzf bundle-grep-*.tar.gz
+mkdir -p ~/.local/bin && mv bundle-grep ~/.local/bin/   # add ~/.local/bin to PATH if it is not there
 bundle-grep --version
 ```
 
