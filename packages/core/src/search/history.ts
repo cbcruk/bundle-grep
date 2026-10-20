@@ -44,7 +44,9 @@ function logArgs(history: HistoryPattern): string[] {
  * `git log -G` keeps a commit when a line it added or removed matches, and
  * lists only the files with such lines; commits left with no file `expr`
  * keeps are dropped. Merges are left out, as `git log` shows them without a
- * diff.
+ * diff. The whole history is walked whatever the search's limit, so the
+ * totals it reports are exact; a common pattern in a large repository costs
+ * a full `git log -G`.
  *
  * @returns The commits, or the {@linkcode GitError} of running git.
  */
@@ -81,6 +83,7 @@ export async function describeCommits(options: DescribeCommitsOptions): Promise<
     '--format=%x1e%H%x00%P%x00%aI%x00%an%x00%s%x00',
     '--patch',
     '--unified=0',
+    '--inter-hunk-context=0',
     '--src-prefix=a/',
     '--dst-prefix=b/',
   ]

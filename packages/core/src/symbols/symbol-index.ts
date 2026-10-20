@@ -119,7 +119,7 @@ function coveredFiles(lsTree: Buffer): TreeFile[] {
  *
  * Only an index of `HEAD`'s commit is saved, so searching another ref does
  * not displace it; another ref's index still reuses what the saved one
- * knows. Saving is best effort: a repository that cannot be written to is
+ * knows, but is parsed again each time it is asked for. Saving is best effort: a repository that cannot be written to is
  * indexed again next time.
  *
  * @returns The index, or a {@linkcode SymbolIndexError} when git fails or
