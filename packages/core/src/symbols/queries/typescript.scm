@@ -1,6 +1,7 @@
 (public_field_definition name: (property_identifier) @name value: [(arrow_function) (function_expression)]) @definition.method
 (function_signature name: (identifier) @name) @definition.function
-(method_signature name: (property_identifier) @name) @definition.method
+((method_signature name: (property_identifier) @name) @definition.method
+  (#not-eq? @name "constructor"))
 (abstract_method_signature name: (property_identifier) @name) @definition.method
 (abstract_class_declaration name: (type_identifier) @name) @definition.class
 (interface_declaration name: (type_identifier) @name) @definition.interface

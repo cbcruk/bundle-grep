@@ -1,8 +1,8 @@
 import { beforeAll, describe, expect, test } from 'bun:test'
 
-import { loadExtractor, type SymbolExtractor } from '../../src/symbols/extract-symbols'
+import { loadExtractor } from '../../src/symbols/extract-symbols'
 import { GRAMMARS, grammarFor, symbolLanguages } from '../../src/symbols/grammars'
-import type { GrammarId } from '../../src/symbols/symbols.types'
+import type { GrammarId, SymbolExtractor } from '../../src/symbols/symbols.types'
 
 let extract: SymbolExtractor
 
@@ -47,7 +47,7 @@ describe('extracting definitions', () => {
 
   test('TypeScript', () => {
     const source = [
-      'export interface Props { a: string; m(): void }',
+      'export interface Props { a: string; m(): void; constructor(): void }',
       'export type Id = string',
       'enum Color { Red }',
       'declare function f(x: number): void',
@@ -80,8 +80,8 @@ describe('extracting definitions', () => {
   test('Go', () => {
     const source = [
       'package main',
-      'const Max = 1',
-      'var debug = false',
+      'const Max, Min = 1, 0',
+      'var debug, _ = false, 0',
       'type Reader interface { Read() }',
       'type Point struct { X int }',
       'type ID string',
@@ -91,6 +91,7 @@ describe('extracting definitions', () => {
     ].join('\n')
     expect(names('go', source)).toEqual([
       'constant Max',
+      'constant Min',
       'variable debug',
       'interface Reader',
       'struct Point',
@@ -139,8 +140,26 @@ describe('extracting definitions', () => {
   test('C and C++', () => {
     const c = '#define MAX 1\n#define SQ(x) ((x)*(x))\nstruct point { int x; };\ntypedef int id;\nenum color { RED };\nint add(int a, int b);\nstatic char *name(void) { return 0; }\n'
     expect(names('c', c)).toEqual(['macro MAX', 'macro SQ', 'struct point', 'type id', 'enum color', 'function add', 'function name'])
-    const cpp = 'namespace ns { class Widget { void draw(); }; }\nvoid Widget::draw() {}\nusing Size = int;\n'
-    expect(names('cpp', cpp)).toEqual(['module ns', 'class Widget', 'method draw', 'method draw', 'type Size'])
+    const cpp = [
+      'namespace ns { class Widget { void draw(); ~Widget(); bool operator==(const Widget&); }; }',
+      'void Widget::draw() { std::string s(name); Widget copy(*this); }',
+      'void ns::Widget::draw() {}',
+      'Widget::~Widget() {}',
+      'namespace a::b {}',
+      'using Size = int;',
+    ].join('\n')
+    expect(names('cpp', cpp)).toEqual([
+      'module ns',
+      'class Widget',
+      'method draw',
+      'method ~Widget',
+      'method operator==',
+      'method draw',
+      'method draw',
+      'method ~Widget',
+      'module a::b',
+      'type Size',
+    ])
   })
 
   test('Ruby', () => {

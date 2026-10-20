@@ -4,5 +4,5 @@
 (type_spec name: (type_identifier) @name type: (struct_type)) @definition.struct
 (type_spec name: (type_identifier) @name) @definition.type
 (type_alias name: (type_identifier) @name) @definition.type
-(source_file (const_declaration (const_spec name: (identifier) @name) @definition.constant))
-(source_file (var_declaration (var_spec name: (identifier) @name) @definition.variable))
+(source_file (const_declaration (const_spec (identifier) @name (#not-eq? @name "_")) @definition.constant))
+(source_file (var_declaration (var_spec (identifier) @name (#not-eq? @name "_")) @definition.variable))

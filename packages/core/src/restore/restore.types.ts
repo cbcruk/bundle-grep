@@ -7,7 +7,6 @@
 import type { ArchiveMismatchError, FileSystemError, InvalidRepoNameError } from '../archive/archive.errors'
 import type { ArchiveEntry, ArchiveLayout, ArchivePaths } from '../archive/archive.types'
 import type { GitError } from '../git/git.errors'
-import type { SymbolParserError } from '../symbols/symbols.errors'
 
 /** Options for {@linkcode restoreRepo} and {@linkcode restoreRepos}. */
 export interface RestoreOptions extends ArchiveLayout {
@@ -38,7 +37,7 @@ export interface RestoreOutcome {
 }
 
 /** The ways restoring one repository can fail. */
-export type RestoreError = GitError | FileSystemError | InvalidRepoNameError | ArchiveMismatchError | SymbolParserError
+export type RestoreError = GitError | FileSystemError | InvalidRepoNameError | ArchiveMismatchError
 
 /** One step of {@linkcode restoreRepos}: a repository that was restored, or one that failed. */
 export type RestoreEvent =

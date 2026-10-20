@@ -14,6 +14,7 @@ import type { SearchLine, SymbolLineOptions } from './search.types'
 
 function linesOf(definitions: readonly SymbolDefinition[], text: string, context: number): SearchLine[] {
   const source = text.split('\n')
+  if (text.endsWith('\n')) source.pop()
   const at = (number: number): string => source[number - 1]!.replace(/\r$/, '')
   const lines = new Map<number, SearchLine>()
   for (const { name, line, column } of definitions) {

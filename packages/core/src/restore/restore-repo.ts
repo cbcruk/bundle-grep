@@ -57,7 +57,8 @@ function lines(output: GitOutput): string[] {
  * since matching refs are all that is compared.
  *
  * The cache's symbol index, which `symbol:` searches, is then brought up to
- * date with {@linkcode symbolIndex}, even when the cache was unchanged.
+ * date with {@linkcode symbolIndex}, even when the cache was unchanged; if
+ * that fails, the next search builds it.
  *
  * When the metadata is present it is trusted over the bundle: the bundle must
  * hold exactly the refs and size it records, and `HEAD` is pointed at its
@@ -163,9 +164,8 @@ export async function restoreRepo(
     if (head === undefined) return mismatch(paths.gitDir, `${paths.gitDir} has no commit at ${symref}`)
     return done({ status: cached ? 'updated' : 'created', paths, defaultBranch, head })
   })
-  if (restored.isErr() || restored.value.head === null) return restored
-  const indexed = await symbolIndex(restored.value.paths.gitDir, { signal: options.signal })
-  return indexed.map(() => restored.value)
+  if (restored.isOk() && restored.value.head !== null) await symbolIndex(restored.value.paths.gitDir, { signal: options.signal })
+  return restored
 }
 
 /**

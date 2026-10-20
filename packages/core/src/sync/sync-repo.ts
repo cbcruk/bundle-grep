@@ -61,7 +61,7 @@ function withoutCredentials(url: string): string {
  * the pack data is intact. The metadata is rewritten on every sync, so fork
  * and archived flags stay current even when the code has not changed. Last,
  * the symbol index of the default branch is brought up to date with
- * {@linkcode symbolIndex}.
+ * {@linkcode symbolIndex}; if that fails, the next search builds it.
  *
  * For `https://github.com/` URLs, git can fall back to `gh` for credentials,
  * replacing the user's own helpers for github.com, so private repositories
@@ -155,7 +155,7 @@ export function syncRepo(target: SyncTarget, options: SyncOptions): Promise<Resu
       syncedAt: (options.now?.() ?? new Date()).toISOString(),
     }
     yield* Result.await(writeMetadata(paths.metadata, metadata))
-    if (head !== null) yield* Result.await(symbolIndex(paths.gitDir, { signal: options.signal }))
+    if (head !== null) await symbolIndex(paths.gitDir, { signal: options.signal })
     return Result.ok({ status, paths, metadata })
   })
 }

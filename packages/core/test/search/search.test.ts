@@ -281,6 +281,7 @@ describe('symbol:', () => {
       [3, false, 16, [{ start: 16, end: 26 }]],
       [4, true, undefined, []],
     ])
+    expect(shown(await collect('symbol:useState', { context: 2 }))['me/lib/index.js']).toEqual([[1, false, 6, [{ start: 6, end: 14 }]]])
   })
 
   test('negated, it keeps the files that define no such symbol', async () => {

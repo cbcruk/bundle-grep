@@ -33,9 +33,10 @@ Queries follow
 [GitHub code search syntax](https://docs.github.com/en/search-github/github-code-search/understanding-github-code-search-syntax):
 terms, `"phrases"`, `/regular expressions/`, the qualifiers `content:`,
 `path:`, `symbol:`, `repo:`, `org:`, `user:`, `language:` and
-`is:fork`/`is:archived`, `AND`, `OR`, `NOT`, `-` and parentheses. Matching ignores case, and `\"` and
-`\\` escape a quote or a backslash inside or outside a phrase. Inside
-`/.../` only `\/` is unescaped, and the rest is passed on as written.
+`is:fork`/`is:archived`, `AND`, `OR`, `NOT`, `-` and parentheses. Matching
+ignores case, and `\"` and `\\` escape a quote or a backslash inside or
+outside a phrase. Inside `/.../` only `\/` is unescaped, and the rest is
+passed on as written.
 
 A `path:` value that starts and ends with `/` is a regular expression, so
 `path:/src/` matches `src` anywhere in the path. For files under a top-level
