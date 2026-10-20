@@ -1,3 +1,16 @@
 packages:
   - packages/*
   - apps/*
+
+# Grammars build native Node bindings on install; only their prebuilt .wasm is used.
+ignoredBuiltDependencies:
+  - tree-sitter-c
+  - tree-sitter-c-sharp
+  - tree-sitter-cpp
+  - tree-sitter-go
+  - tree-sitter-java
+  - tree-sitter-javascript
+  - tree-sitter-python
+  - tree-sitter-ruby
+  - tree-sitter-rust
+  - tree-sitter-typescript

@@ -18,6 +18,7 @@ import type { GitError } from '../git/git.errors'
 import type { GitOutput } from '../git/git.types'
 import { branchesOf, chooseHead, refsDigest } from '../git/refs'
 import { runGit } from '../git/run-git'
+import { symbolIndex } from '../symbols/symbol-index'
 import type { SyncError, SyncEvent, SyncOptions, SyncOutcome, SyncStatus, SyncTarget } from './sync.types'
 
 /** How old a leftover temporary bundle must be before it counts as abandoned. */
@@ -58,7 +59,9 @@ function withoutCredentials(url: string): string {
  * interrupted sync left behind are removed once they are an hour old.
  * `verify` reads only the header and checks prerequisites; it does not prove
  * the pack data is intact. The metadata is rewritten on every sync, so fork
- * and archived flags stay current even when the code has not changed.
+ * and archived flags stay current even when the code has not changed. Last,
+ * the symbol index of the default branch is brought up to date with
+ * {@linkcode symbolIndex}.
  *
  * For `https://github.com/` URLs, git can fall back to `gh` for credentials,
  * replacing the user's own helpers for github.com, so private repositories
@@ -152,6 +155,7 @@ export function syncRepo(target: SyncTarget, options: SyncOptions): Promise<Resu
       syncedAt: (options.now?.() ?? new Date()).toISOString(),
     }
     yield* Result.await(writeMetadata(paths.metadata, metadata))
+    if (head !== null) yield* Result.await(symbolIndex(paths.gitDir, { signal: options.signal }))
     return Result.ok({ status, paths, metadata })
   })
 }

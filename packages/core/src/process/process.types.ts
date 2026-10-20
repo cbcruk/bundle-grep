@@ -14,6 +14,13 @@ export interface RunProcessOptions {
   allowExitCodes?: readonly number[]
   /** Kills the process when aborted; the run then fails. */
   signal?: AbortSignal
+  /** Written to the process's stdin, which is then closed; without it, stdin is closed at once. */
+  input?: string
+  /**
+   * Receives stdout as it arrives, instead of collecting it into
+   * {@linkcode ProcessOutput.stdout}, which is then empty.
+   */
+  onStdout?: (chunk: Buffer) => void
 }
 
 /** What a process that exited with an accepted status produced. */

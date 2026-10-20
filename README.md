@@ -32,8 +32,8 @@ JSON array and the other commands one JSON object per line.
 Queries follow
 [GitHub code search syntax](https://docs.github.com/en/search-github/github-code-search/understanding-github-code-search-syntax):
 terms, `"phrases"`, `/regular expressions/`, the qualifiers `content:`,
-`path:`, `repo:`, `org:`, `user:`, `language:` and `is:fork`/`is:archived`,
-`AND`, `OR`, `NOT`, `-` and parentheses. Matching ignores case, and `\"` and
+`path:`, `symbol:`, `repo:`, `org:`, `user:`, `language:` and
+`is:fork`/`is:archived`, `AND`, `OR`, `NOT`, `-` and parentheses. Matching ignores case, and `\"` and
 `\\` escape a quote or a backslash inside or outside a phrase. Inside
 `/.../` only `\/` is unescaped, and the rest is passed on as written.
 
@@ -41,6 +41,16 @@ A `path:` value that starts and ends with `/` is a regular expression, so
 `path:/src/` matches `src` anywhere in the path. For files under a top-level
 `src` directory, write the glob `path:/src/**` or the expression
 `path:/^src\//`.
+
+`symbol:` finds definitions — functions, methods, classes, types and the
+like — rather than every mention: `symbol:useState` matches a definition named
+`useState`, ignoring case, and `symbol:/^use/` any whose name starts with
+`use`. Definitions are found with [tree-sitter](https://tree-sitter.github.io)
+in C, C#, C++, Go, Java, JavaScript, Python, Ruby, Rust, TypeScript and TSX
+files under 1 MiB. `sync` and `restore` index each repository's default
+branch, and a search indexes one it finds without an index; an index only
+parses the files that changed since the last one. Qualified names such as
+`symbol:Maint.deleteRows` are not supported.
 
 ## Development
 

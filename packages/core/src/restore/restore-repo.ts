@@ -18,6 +18,7 @@ import type { GitError } from '../git/git.errors'
 import type { GitOutput } from '../git/git.types'
 import { branchesOf, chooseHead, refsDigest } from '../git/refs'
 import { runGit } from '../git/run-git'
+import { symbolIndex } from '../symbols/symbol-index'
 import type { RestoreError, RestoreEvent, RestoreOptions, RestoreOutcome } from './restore.types'
 
 /** The refs sync keeps, and so the only ones restored. */
@@ -55,6 +56,9 @@ function lines(output: GitOutput): string[] {
  * safe; that is also the way to repair a cache whose objects were damaged,
  * since matching refs are all that is compared.
  *
+ * The cache's symbol index, which `symbol:` searches, is then brought up to
+ * date with {@linkcode symbolIndex}, even when the cache was unchanged.
+ *
  * When the metadata is present it is trusted over the bundle: the bundle must
  * hold exactly the refs and size it records, and `HEAD` is pointed at its
  * default branch; a mismatch fails before the cache is touched. Metadata that
@@ -80,11 +84,11 @@ function lines(output: GitOutput): string[] {
  * if (outcome.isOk()) console.log(outcome.value.status, outcome.value.paths.gitDir);
  * ```
  */
-export function restoreRepo(
+export async function restoreRepo(
   repo: Pick<ArchiveEntry, 'owner' | 'name'>,
   options: RestoreOptions,
 ): Promise<Result<RestoreOutcome, RestoreError>> {
-  return Result.gen(async function* () {
+  const restored = await Result.gen(async function* () {
     const paths = yield* archivePaths(options, repo.owner, repo.name)
     const metadata = yield* Result.await(readMetadata(paths.metadata))
     const mismatch = (path: string, message: string): Result<never, ArchiveMismatchError> =>
@@ -159,6 +163,9 @@ export function restoreRepo(
     if (head === undefined) return mismatch(paths.gitDir, `${paths.gitDir} has no commit at ${symref}`)
     return done({ status: cached ? 'updated' : 'created', paths, defaultBranch, head })
   })
+  if (restored.isErr() || restored.value.head === null) return restored
+  const indexed = await symbolIndex(restored.value.paths.gitDir, { signal: options.signal })
+  return indexed.map(() => restored.value)
 }
 
 /**

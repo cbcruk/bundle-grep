@@ -82,6 +82,33 @@ describe('path:', () => {
   })
 })
 
+describe('symbol:', () => {
+  test('a literal names a definition exactly, ignoring case', () => {
+    expect(expr('symbol:a.b')).toEqual({ op: 'symbol', regex: '^a\\.b$', ignoreCase: true })
+  })
+
+  test('a regex is run by JavaScript, case-sensitive after (?-i)', () => {
+    expect(expr('symbol:/^use/')).toEqual({ op: 'symbol', regex: '^use', ignoreCase: true })
+    expect(expr('symbol:/(?-i)^Use/')).toEqual({ op: 'symbol', regex: '^Use', ignoreCase: false })
+  })
+
+  test('an invalid regex', () => {
+    const failure = error('x symbol:/[a/')
+    expect(failure.message).toStartWith('Invalid regular expression for symbol: ')
+    expect(failure).toMatchObject({ offset: 2, length: 11 })
+  })
+
+  test('positive symbol: leaves are kept for showing definitions, apart from content highlights', () => {
+    const compiled = plan('symbol:foo foo -symbol:bar symbol:FOO symbol:/^x/').unwrap()
+    expect(compiled.highlight).toEqual([{ kind: 'literal', value: 'foo', quoted: false }])
+    expect(compiled.symbols).toEqual([
+      { op: 'symbol', regex: '^foo$', ignoreCase: true },
+      { op: 'symbol', regex: '^FOO$', ignoreCase: true },
+      { op: 'symbol', regex: '^x', ignoreCase: true },
+    ])
+  })
+})
+
 describe('language:', () => {
   test('by name, case-insensitively', () => {
     expect(expr('language:typescript')).toEqual({

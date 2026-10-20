@@ -28,7 +28,7 @@ function contentRegexes(node: QueryNode, into: Map<string, Regex>): Map<string, 
   switch (node.type) {
     case 'match': {
       const { field, pattern, span } = node
-      if (pattern.kind === 'regex' && field !== 'path' && !into.has(pattern.source)) {
+      if (pattern.kind === 'regex' && field !== 'path' && field !== 'symbol' && !into.has(pattern.source)) {
         into.set(pattern.source, { source: pattern.source, span })
       }
       break
@@ -91,7 +91,7 @@ async function checkRegex(
 /**
  * Checks that git can compile every content regex of a query.
  *
- * {@linkcode compileQuery} validates `path:` regexes, which JavaScript runs,
+ * {@linkcode compileQuery} validates `path:` and `symbol:` regexes, which JavaScript runs,
  * but leaves content regexes to git's PCRE. Without this check an invalid one
  * fails each repository's search separately, with git's message and no span.
  * Each distinct regex costs one short `git grep`; a query without any runs

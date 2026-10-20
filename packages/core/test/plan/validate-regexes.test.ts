@@ -22,6 +22,10 @@ describe('validateRegexes', () => {
     expect(await check('/(?-i)Foo/')).toBe('ok')
   })
 
+  test('symbol: regexes are left to JavaScript', async () => {
+    expect(await check('symbol:/(?<=a)b/')).toBe('ok')
+  })
+
   test('an invalid regex term points at itself', async () => {
     expect(await check('foo /[a-z/')).toEqual({
       message: 'Invalid regular expression: missing terminating ] for character class',

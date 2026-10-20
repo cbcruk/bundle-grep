@@ -6,18 +6,21 @@
 
 import { Result } from 'better-result'
 
-import type { GitError } from '../git/git.errors'
+import { GitError } from '../git/git.errors'
 import { isEmptyRepo } from '../git/is-empty-repo'
 import { runGit } from '../git/run-git'
 import { grepArgs } from '../plan/grep-args'
 import { languageOf } from '../plan/languages'
 import { listMatchingFiles } from '../plan/list-matching-files'
-import type { GrepLeaf } from '../plan/plan.types'
+import type { FileExpr, GrepLeaf } from '../plan/plan.types'
 import { specializePlan } from '../plan/specialize-plan'
 import type { Pattern } from '../query/query.types'
+import { symbolIndex } from '../symbols/symbol-index'
+import type { SymbolIndex, SymbolIndexError } from '../symbols/symbols.types'
 import { byteColumnToIndex, createHighlighter } from './match-ranges'
 import { parseGrepOutput } from './parse-grep-output'
 import { PcreUnavailableError } from './search.errors'
+import { collectSymbolLines, mergeLines } from './symbol-lines'
 import type {
   LineOptions,
   SearchEvent,
@@ -41,8 +44,8 @@ const MAX_PATHSPEC_BYTES = 24 * 1024
  * @returns A {@linkcode PcreUnavailableError} when git's message says PCRE is
  * missing, the original error otherwise.
  */
-export function toSearchRepoError(error: GitError): SearchRepoError {
-  if (/USE_LIBPCRE|Perl-compatible/i.test(error.stderr)) {
+export function toSearchRepoError<E extends SearchRepoError>(error: E): E | PcreUnavailableError {
+  if (error instanceof GitError && /USE_LIBPCRE|Perl-compatible/i.test(error.stderr)) {
     return new PcreUnavailableError({
       message: 'This git was built without PCRE support, which regular expression searches need',
     })
@@ -122,6 +125,13 @@ export async function collectLines(options: LineOptions): Promise<Result<Map<str
   )
 }
 
+function hasSymbolLeaf(expr: FileExpr): boolean {
+  if (expr.op === 'symbol') return true
+  if (expr.op === 'not') return hasSymbolLeaf(expr.child)
+  if (expr.op === 'and' || expr.op === 'or') return expr.children.some(hasSymbolLeaf)
+  return false
+}
+
 function count(record: Record<string, number>, key: string): void {
   record[key] = (record[key] ?? 0) + 1
 }
@@ -190,30 +200,43 @@ export async function* search<Repo extends SearchRepo>(
     const expr = specializePlan(plan.expr, filter => holds(repo, filter))
     if (expr.op === 'none') return
     const ref = repo.ref ?? 'HEAD'
-
-    const files = await listMatchingFiles({ gitDir: repo.gitDir, expr, ref, signal: stop })
-    if (stop.aborted) return
-    if (files.isErr()) {
+    const failed = async (error: SymbolIndexError): Promise<void> => {
       const empty = repo.ref === undefined && (await isEmptyRepo(repo.gitDir, stop)).unwrapOr(false)
       if (stop.aborted || empty) return
-      push({ type: 'repo-error', repo: repo.name, error: toSearchRepoError(files.error) })
-      return
+      push({ type: 'repo-error', repo: repo.name, error: toSearchRepoError(error) })
     }
+
+    let symbols: SymbolIndex | undefined
+    if (hasSymbolLeaf(expr)) {
+      const index = await symbolIndex(repo.gitDir, { ref, signal: stop })
+      if (stop.aborted) return
+      if (index.isErr()) return failed(index.error)
+      symbols = index.value
+    }
+
+    const files = await listMatchingFiles({ gitDir: repo.gitDir, expr, ref, symbols, signal: stop })
+    if (stop.aborted) return
+    if (files.isErr()) return failed(files.error)
 
     const languages = new Map(files.value.map(path => [path, languageOf(path)]))
     const shown = files.value.slice(0, Math.max(0, limit - reserved))
     reserved += shown.length
 
-    const lines =
+    const [lines, symbolLines] = await Promise.all([
       plan.highlight.length && shown.length
-        ? await collectLines({ repo, ref, files: shown, patterns: plan.highlight, context, maxMatchesPerFile, signal: stop })
-        : Result.ok(new Map<string, SearchLine[]>())
+        ? collectLines({ repo, ref, files: shown, patterns: plan.highlight, context, maxMatchesPerFile, signal: stop })
+        : Result.ok(new Map<string, SearchLine[]>()),
+      symbols && plan.symbols.length && shown.length
+        ? collectSymbolLines({ repo, index: symbols, files: shown, leaves: plan.symbols, context, maxMatchesPerFile, signal: stop })
+        : Result.ok(new Map<string, SearchLine[]>()),
+    ])
     if (stop.aborted) return
-    if (lines.isErr()) {
+    const lost = (error: GitError): void => {
       reserved -= shown.length
-      push({ type: 'repo-error', repo: repo.name, error: toSearchRepoError(lines.error) })
-      return
+      push({ type: 'repo-error', repo: repo.name, error: toSearchRepoError(error) })
     }
+    if (lines.isErr()) return lost(lines.error)
+    if (symbolLines.isErr()) return lost(symbolLines.error)
 
     for (const [path, language] of languages) {
       totalFiles++
@@ -223,7 +246,8 @@ export async function* search<Repo extends SearchRepo>(
     }
     for (const path of shown) {
       emitted++
-      push({ type: 'file', repo: repo.name, path, language: languages.get(path), lines: lines.value.get(path) ?? [] })
+      const found = mergeLines(lines.value.get(path) ?? [], symbolLines.value.get(path) ?? [])
+      push({ type: 'file', repo: repo.name, path, language: languages.get(path), lines: found })
     }
   }
 

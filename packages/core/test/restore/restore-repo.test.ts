@@ -52,6 +52,18 @@ describe('restoreRepo', () => {
     expect((await restoreRepo(REPO, layout)).unwrap().status).toBe('unchanged')
   })
 
+  test('sync builds the symbol index, and restore rebuilds it even for a cache that already matched', async () => {
+    using fixture = createFixtureRepo(FIRST)
+    const layout = layoutOf(fixture)
+    const { paths } = (await syncRepo(targetOf(fixture), layout)).unwrap()
+    const indexFile = join(paths.gitDir, 'bundle-grep-symbols.json')
+    expect(readFileSync(indexFile, 'utf8')).toContain('"needle"')
+
+    rmSync(indexFile)
+    expect((await restoreRepo(REPO, layout)).unwrap().status).toBe('unchanged')
+    expect(readFileSync(indexFile, 'utf8')).toContain('"needle"')
+  })
+
   test('brings an older cache to exactly the bundle', async () => {
     using fixture = createFixtureRepo(FIRST)
     fixture.git('branch', 'gone')

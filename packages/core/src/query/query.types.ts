@@ -42,8 +42,9 @@ export type Pattern =
  * - `any`: a file's contents or its path — what a bare term searches on GitHub.
  * - `content`: only the contents, from `content:`.
  * - `path`: only the path, from `path:`.
+ * - `symbol`: the names of the definitions in a file, from `symbol:`.
  */
-export type MatchField = 'any' | 'content' | 'path'
+export type MatchField = 'any' | 'content' | 'path' | 'symbol'
 
 /** A pattern that has to match a file's contents or path. */
 export interface MatchNode {

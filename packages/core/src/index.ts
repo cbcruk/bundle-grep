@@ -35,6 +35,7 @@ export type {
   PathLeaf,
   QueryExpr,
   SearchPlan,
+  SymbolLeaf,
   ValidateRegexesOptions,
 } from './plan/plan.types'
 export { specializePlan } from './plan/specialize-plan'
@@ -72,6 +73,17 @@ export type {
   SyncTarget,
 } from './sync/sync.types'
 export { targetFromUrl } from './sync/target-from-url'
+export { symbolLanguages } from './symbols/grammars'
+export { SymbolParserError } from './symbols/symbols.errors'
+export { symbolIndex } from './symbols/symbol-index'
+export type {
+  IndexedFile,
+  SymbolDefinition,
+  SymbolIndex,
+  SymbolIndexError,
+  SymbolIndexOptions,
+  SymbolKind,
+} from './symbols/symbols.types'
 export type {
   AndNode,
   FilterKey,
