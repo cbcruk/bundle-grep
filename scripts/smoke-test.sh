@@ -27,20 +27,23 @@ printf 'export function greetSmoke(): string {\n  return "hello"\n}\n' >"$work/r
 git -C "$work/repo" add .
 git -C "$work/repo" commit --quiet -m init
 
+# Runs the binary with the given arguments and fails unless it succeeds and prints the pattern.
 expect() {
-  local output=$1 pattern=$2 message=$3
+  local pattern=$1 message=$2 output
+  shift 2
+  output=$("$binary" "$@") || fail "$message (exit $?)"
   grep -q -- "$pattern" <<<"$output" || fail "$message"
 }
 
 owner=$(basename "$work")
 root="$work/root"
 "$binary" sync "$work/repo" --root "$root"
-expect "$("$binary" list --root "$root")" "$owner/repo" "list does not show the repository"
-expect "$("$binary" search greetSmoke --root "$root")" 'src/greet.ts' "search found nothing"
-expect "$("$binary" search 'symbol:greetSmoke' --root "$root")" 'src/greet.ts:1' "symbol: found nothing"
+expect "$owner/repo" "list does not show the repository" list --root "$root"
+expect 'src/greet.ts' "search found nothing" search greetSmoke --root "$root"
+expect 'src/greet.ts:1' "symbol: found nothing" search 'symbol:greetSmoke' --root "$root"
 rm -rf "$root/cache"
 "$binary" restore --root "$root"
-expect "$("$binary" search 'path:greet language:typescript' --root "$root")" 'src/greet.ts' "search after restore found nothing"
+expect 'src/greet.ts' "search after restore found nothing" search 'path:greet language:typescript' --root "$root"
 "$binary" ui --help >/dev/null || fail "ui --help failed"
 grep -a -q '<title>bundle-grep</title>' "$binary" || fail "the search window's UI is not embedded"
 echo "smoke test passed"
