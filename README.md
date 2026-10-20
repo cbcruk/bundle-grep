@@ -124,8 +124,17 @@ like — rather than every mention: `symbol:useState` matches a definition named
 in C, C#, C++, Go, Java, JavaScript, Python, Ruby, Rust, TypeScript and TSX
 files under 1 MiB. `sync` and `restore` index each repository's default
 branch, and a search indexes one it finds without an index; an index only
-parses the files that changed since the last one. Qualified names such as
-`symbol:Maint.deleteRows` are not supported.
+parses the files that changed since the last one.
+
+A definition inside a class, struct, interface, enum, trait, module or
+namespace is also known by the names around it, as is a Go method by its
+receiver and a Rust one by its `impl`. A `symbol:` value with a `.` or `::`
+in it matches the end of such a name, so `symbol:Maint.deleteRows` finds the
+`deleteRows` method of `Maint` and not other `deleteRows`. Either separator
+works in any language, as do regular expressions:
+`symbol:/^String::to_/` finds the methods of `String` that start with `to_`.
+A regular expression is only compared with these longer names when it holds
+`::` or an escaped `\.`.
 
 `ref:` searches a branch, tag or commit instead of the default branch:
 `ref:v1.0 useState`. Repositories without that ref are skipped, and results

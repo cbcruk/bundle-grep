@@ -18,7 +18,24 @@ interface Loaded {
   query: Query
 }
 
+interface Found {
+  pattern: number
+  name: Node
+  definition: Node
+  kind: SymbolKind
+  scope: string | undefined
+}
+
 const DEFINITION = 'definition.'
+
+/** The kinds of definition whose members are named after them. */
+const CONTAINERS: ReadonlySet<SymbolKind> = new Set(['class', 'enum', 'interface', 'module', 'struct', 'trait'])
+
+/** Nodes that write a name after its scope, as C++ `A::b` and Ruby `A::B` do. */
+const SCOPED: ReadonlySet<string> = new Set(['qualified_identifier', 'scope_resolution'])
+
+/** What a C++ qualified declarator may end in. */
+const DECLARATOR_NAMES: ReadonlySet<string> = new Set(['identifier', 'destructor_name', 'operator_name'])
 
 let runtime: Promise<Result<void, SymbolParserError>> | undefined
 const loaded = new Map<GrammarId, Promise<Result<Loaded, SymbolParserError>>>()
@@ -27,6 +44,60 @@ const loaded = new Map<GrammarId, Promise<Result<Loaded, SymbolParserError>>>()
 function isInside(node: Node, type: string): boolean {
   for (let parent = node.parent; parent; parent = parent.parent) if (parent.type === type) return true
   return false
+}
+
+/** Reads a type written as a scope, dropping pointer and reference marks, generic arguments and spaces, so `*Set[T]` reads `Set`. */
+function scopeName(text: string): string {
+  let name = text.replace(/^[*&\s]+(mut\s+)?/, '').replace(/\s+/g, '')
+  for (let previous = ''; previous !== name; ) {
+    previous = name
+    name = name.replace(/<[^<>]*>|\[[^[\]]*\]/g, '')
+  }
+  return name
+}
+
+/** Follows a C++ `A::B::c` declarator down to the name it ends in. */
+function declaredName(node: Node): Node | null {
+  let current: Node | null = node
+  while (current && SCOPED.has(current.type)) current = current.childForFieldName('name')
+  return current && DECLARATOR_NAMES.has(current.type) ? current : null
+}
+
+/** Lists the scopes written before a name, outermost first, as `A` and `B` before `c` in `A::B::c`. */
+function writtenScopes(name: Node): string[] {
+  const scopes: string[] = []
+  for (let node = name; node.parent && SCOPED.has(node.parent.type); node = node.parent) {
+    if (node.parent.childForFieldName('name')?.id !== node.id) break
+    const scope = node.parent.childForFieldName('scope')
+    if (scope) scopes.unshift(scopeName(scope.text))
+  }
+  return scopes
+}
+
+/** Names each definition after the definitions around it, its own `@scope`, and the scopes written before its name. */
+function qualify(found: readonly Found[], separator: string): Map<Found, string> {
+  const containers = new Map<number, Found>()
+  for (const entry of found) if (CONTAINERS.has(entry.kind)) containers.set(entry.definition.id, entry)
+  const qualified = new Map<Found, string>()
+  const qualifiedOf = (entry: Found): string => {
+    const known = qualified.get(entry)
+    if (known !== undefined) return known
+    const parts: string[] = []
+    for (let parent = entry.definition.parent; parent; parent = parent.parent) {
+      const container = containers.get(parent.id)
+      if (container && container !== entry) {
+        parts.push(qualifiedOf(container))
+        break
+      }
+    }
+    if (entry.scope) parts.push(entry.scope)
+    parts.push(...writtenScopes(entry.name), entry.name.text)
+    const name = parts.join(separator)
+    qualified.set(entry, name)
+    return name
+  }
+  for (const entry of found) qualifiedOf(entry)
+  return qualified
 }
 
 function failure(what: string, cause: unknown): SymbolParserError {
@@ -65,7 +136,9 @@ function loadGrammar(id: GrammarId): Promise<Result<Loaded, SymbolParserError>> 
  * method that is also a function, keeps the kind of the first pattern in the
  * query. A pattern that sets `outside` to a node type, as with
  * `(#set! outside "compound_statement")`, skips definitions inside such a
- * node. A file the grammar cannot make sense of yields what it could parse,
+ * node. Each definition inside a class, struct, interface, enum, trait or
+ * module, or with a `@scope`, also gets a {@linkcode SymbolDefinition.qualified}
+ * name. A file the grammar cannot make sense of yields what it could parse,
  * and one tree-sitter fails on, or an extractor asked for a grammar it did
  * not load, yields nothing.
  *
@@ -90,27 +163,39 @@ export async function loadExtractor(grammars: Iterable<GrammarId>): Promise<Resu
     const tree = Result.try(() => parser.parse(text)).unwrapOr(null)
     if (!tree) return []
     try {
-      const found = new Map<number, { pattern: number; symbol: SymbolDefinition }>()
+      const found = new Map<number, Found>()
       for (const match of grammar.query.matches(tree.rootNode)) {
-        const name = match.captures.find(capture => capture.name === 'name')?.node
+        const capture = (name: string): Node | undefined => match.captures.find(candidate => candidate.name === name)?.node
+        const written = capture('qualified')
+        const name = capture('name') ?? (written && declaredName(written))
         const definition = match.captures.find(capture => capture.name.startsWith(DEFINITION))
         if (!name || !definition || name.text === '') continue
         const outside = match.setProperties?.outside
         if (outside && isInside(definition.node, outside)) continue
         const existing = found.get(name.startIndex)
         if (existing && existing.pattern <= match.patternIndex) continue
-        const { row } = name.startPosition
+        const scope = capture('scope')
         found.set(name.startIndex, {
           pattern: match.patternIndex,
-          symbol: {
-            name: name.text,
-            kind: definition.name.slice(DEFINITION.length) as SymbolKind,
-            line: row + 1,
-            column: name.startPosition.column,
-          },
+          name,
+          definition: definition.node,
+          kind: definition.name.slice(DEFINITION.length) as SymbolKind,
+          scope: scope && scopeName(scope.text),
         })
       }
-      return [...found.entries()].sort(([a], [b]) => a - b).map(([, { symbol }]) => symbol)
+      const entries = [...found.entries()].sort(([a], [b]) => a - b).map(([, entry]) => entry)
+      const qualified = qualify(entries, GRAMMARS[id].separator)
+      return entries.map(entry => {
+        const symbol: SymbolDefinition = {
+          name: entry.name.text,
+          kind: entry.kind,
+          line: entry.name.startPosition.row + 1,
+          column: entry.name.startPosition.column,
+        }
+        const full = qualified.get(entry)
+        if (full !== undefined && full !== symbol.name) symbol.qualified = full
+        return symbol
+      })
     } catch {
       return []
     } finally {

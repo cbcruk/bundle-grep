@@ -34,9 +34,9 @@ const MAX_FILE_BYTES = 1024 * 1024
 const BINARY_PROBE_BYTES = 8000
 
 /** The stored format and extraction rules; raise it when either changes, so older indexes are rebuilt. */
-const VERSION = 1
+const VERSION = 2
 
-type StoredSymbol = [name: string, kind: SymbolKind, line: number, column: number]
+type StoredSymbol = [name: string, kind: SymbolKind, line: number, column: number, qualified?: string]
 
 interface StoredIndex {
   version: typeof VERSION
@@ -71,7 +71,12 @@ function fromStored(stored: StoredIndex): SymbolIndex {
   const files = new Map<string, IndexedFile>()
   for (const [path, [oid, symbols]] of Object.entries(stored.files)) {
     if (typeof oid !== 'string') throw new TypeError(`Malformed entry for ${path}`)
-    files.set(path, { oid, symbols: symbols.map(([name, kind, line, column]) => ({ name, kind, line, column })) })
+    files.set(path, {
+      oid,
+      symbols: symbols.map(([name, kind, line, column, qualified]) =>
+        qualified === undefined ? { name, kind, line, column } : { name, kind, line, column, qualified },
+      ),
+    })
   }
   return { commit: stored.commit, files }
 }
@@ -79,7 +84,12 @@ function fromStored(stored: StoredIndex): SymbolIndex {
 function toStored(index: SymbolIndex): StoredIndex {
   const files: StoredIndex['files'] = {}
   for (const [path, { oid, symbols }] of index.files) {
-    files[path] = [oid, symbols.map(({ name, kind, line, column }) => [name, kind, line, column])]
+    files[path] = [
+      oid,
+      symbols.map(({ name, kind, line, column, qualified }) =>
+        qualified === undefined ? [name, kind, line, column] : [name, kind, line, column, qualified],
+      ),
+    ]
   }
   return { version: VERSION, indexer: INDEXER, commit: index.commit, files }
 }

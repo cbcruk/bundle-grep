@@ -173,6 +173,60 @@ describe('extracting definitions', () => {
   })
 })
 
+describe('qualified names', () => {
+  function qualified(grammar: GrammarId, source: string): string[] {
+    return extract(grammar, source).map(symbol => symbol.qualified ?? symbol.name)
+  }
+
+  test('members are named after the definitions around them', () => {
+    expect(qualified('typescript', 'class Svc { run() {} f = () => 1 }\ninterface I { go(): void }\nnamespace N.M { function f() {} }')).toEqual([
+      'Svc',
+      'Svc.run',
+      'Svc.f',
+      'I',
+      'I.go',
+      'N.M',
+      'N.M.f',
+    ])
+    expect(qualified('python', 'class A:\n  class B:\n    def m(self): pass\n  def n(self): pass\ndef f(): pass\n')).toEqual([
+      'A',
+      'A.B',
+      'A.B.m',
+      'A.n',
+      'f',
+    ])
+    expect(qualified('java', 'class O { class In { void m() {} } void n() {} }')).toEqual(['O', 'O.In', 'O.In.m', 'O.n'])
+    expect(qualified('csharp', 'namespace A.B { class C { void M() {} } }')).toEqual(['A.B', 'A.B.C', 'A.B.C.M'])
+  })
+
+  test('Go methods are named after their receiver, and Rust ones after their impl', () => {
+    expect(qualified('go', 'package p\nfunc (m *Maint) deleteRows() {}\nfunc (s Set[T]) Add(v T) {}\nfunc Top() {}\n')).toEqual([
+      'Maint.deleteRows',
+      'Set.Add',
+      'Top',
+    ])
+    expect(qualified('rust', 'mod m { impl<T> Foo<T> { fn new() {} } }\nimpl Display for &mut Bar { fn fmt() {} }\ntrait T { fn d() {} }')).toEqual([
+      'm',
+      'm::Foo::new',
+      'Bar::fmt',
+      'T',
+      'T::d',
+    ])
+  })
+
+  test('scopes written before a name count, at any depth', () => {
+    expect(qualified('cpp', 'namespace ns { class K { void m(); }; }\nvoid A::B::C::d() {}\ntemplate<> void Foo<int>::bar() {}')).toEqual([
+      'ns',
+      'ns::K',
+      'ns::K::m',
+      'A::B::C::d',
+      'Foo::bar',
+    ])
+    expect(qualified('ruby', 'module M\n  class A::B\n    def y; end\n  end\nend\n')).toEqual(['M', 'M::A::B', 'M::A::B::y'])
+    expect(extract('ruby', 'class A::B; end').map(symbol => symbol.name)).toEqual(['B'])
+  })
+})
+
 describe('positions', () => {
   test('lines are 1-based and columns count UTF-16 code units', () => {
     expect(extract('typescript', 'let s = "한글😀"; function 이름() {}\n\nclass B {}\n')).toEqual([

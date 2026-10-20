@@ -1,4 +1,4 @@
-(impl_item body: (declaration_list (function_item name: (identifier) @name) @definition.method))
+(impl_item type: (_) @scope body: (declaration_list (function_item name: (identifier) @name) @definition.method))
 (trait_item body: (declaration_list (function_item name: (identifier) @name) @definition.method))
 (trait_item body: (declaration_list (function_signature_item name: (identifier) @name) @definition.method))
 (function_item name: (identifier) @name) @definition.function

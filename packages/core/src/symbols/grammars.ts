@@ -4,7 +4,9 @@
  * Grammars are bundled as WebAssembly, so `bun build --compile` embeds them
  * and nothing needs installing. Each query captures a definition as
  * `@definition.<kind>` and its name as `@name`, following tree-sitter's tags
- * convention, and leaves references out.
+ * convention, and leaves references out. A definition may also capture the
+ * type it belongs to as `@scope`, as a Go receiver or a Rust `impl` does, or
+ * a C++ `A::B::c` declarator whole as `@qualified` in place of `@name`.
  *
  * @module
  */
@@ -50,17 +52,17 @@ import type { Grammar, GrammarId } from './symbols.types'
 
 /** The grammars by id. */
 export const GRAMMARS: Readonly<Record<GrammarId, Grammar>> = {
-  c: { wasm: cWasm, query: cQuery, version: cPackage.version },
-  cpp: { wasm: cppWasm, query: cQuery + cppQuery, version: cppPackage.version },
-  csharp: { wasm: csharpWasm, query: csharpQuery, version: csharpPackage.version },
-  go: { wasm: goWasm, query: goQuery, version: goPackage.version },
-  java: { wasm: javaWasm, query: javaQuery, version: javaPackage.version },
-  javascript: { wasm: javascriptWasm, query: ecmascriptQuery + javascriptQuery, version: javascriptPackage.version },
-  python: { wasm: pythonWasm, query: pythonQuery, version: pythonPackage.version },
-  ruby: { wasm: rubyWasm, query: rubyQuery, version: rubyPackage.version },
-  rust: { wasm: rustWasm, query: rustQuery, version: rustPackage.version },
-  tsx: { wasm: tsxWasm, query: ecmascriptQuery + typescriptQuery, version: typescriptPackage.version },
-  typescript: { wasm: typescriptWasm, query: ecmascriptQuery + typescriptQuery, version: typescriptPackage.version },
+  c: { wasm: cWasm, query: cQuery, version: cPackage.version, separator: '.' },
+  cpp: { wasm: cppWasm, query: cQuery + cppQuery, version: cppPackage.version, separator: '::' },
+  csharp: { wasm: csharpWasm, query: csharpQuery, version: csharpPackage.version, separator: '.' },
+  go: { wasm: goWasm, query: goQuery, version: goPackage.version, separator: '.' },
+  java: { wasm: javaWasm, query: javaQuery, version: javaPackage.version, separator: '.' },
+  javascript: { wasm: javascriptWasm, query: ecmascriptQuery + javascriptQuery, version: javascriptPackage.version, separator: '.' },
+  python: { wasm: pythonWasm, query: pythonQuery, version: pythonPackage.version, separator: '.' },
+  ruby: { wasm: rubyWasm, query: rubyQuery, version: rubyPackage.version, separator: '::' },
+  rust: { wasm: rustWasm, query: rustQuery, version: rustPackage.version, separator: '::' },
+  tsx: { wasm: tsxWasm, query: ecmascriptQuery + typescriptQuery, version: typescriptPackage.version, separator: '.' },
+  typescript: { wasm: typescriptWasm, query: ecmascriptQuery + typescriptQuery, version: typescriptPackage.version, separator: '.' },
 }
 
 const BY_LANGUAGE: Readonly<Record<string, GrammarId>> = {
@@ -82,7 +84,7 @@ const BY_LANGUAGE: Readonly<Record<string, GrammarId>> = {
  * with, so an index built by another version is rebuilt rather than trusted.
  */
 export const INDEXER: string = createHash('sha256')
-  .update(JSON.stringify([Object.entries(GRAMMARS).map(([id, { query, version }]) => [id, version, query]), BY_LANGUAGE]))
+  .update(JSON.stringify([Object.entries(GRAMMARS).map(([id, { query, version, separator }]) => [id, version, query, separator]), BY_LANGUAGE]))
   .update(JSON.stringify(linguist))
   .digest('hex')
   .slice(0, 16)

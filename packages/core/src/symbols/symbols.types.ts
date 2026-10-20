@@ -33,6 +33,8 @@ export interface Grammar {
   query: string
   /** The grammar package's version, which a change of invalidates every index. */
   version: string
+  /** What joins a definition's name to its container's, as in `Maint.deleteRows` or `Maint::deleteRows`. */
+  separator: '.' | '::'
 }
 
 /** Finds the definitions in one file's text with the grammar given. */
@@ -42,6 +44,12 @@ export type SymbolExtractor = (grammar: GrammarId, text: string) => SymbolDefini
 export interface SymbolDefinition {
   /** The defined name, such as `"useState"`. */
   name: string
+  /**
+   * The name with the definitions around it, outermost first, joined by the
+   * language's {@linkcode Grammar.separator}, such as `"Maint.deleteRows"`;
+   * absent when nothing encloses the definition.
+   */
+  qualified?: string
   /** What it defines. */
   kind: SymbolKind
   /** The 1-based line the name is on. */
