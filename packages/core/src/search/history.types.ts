@@ -73,10 +73,12 @@ export interface MatchingCommitsOptions {
 export interface DescribeCommitsOptions {
   /** The repository to run git in. */
   gitDir: string
-  /** The commits to describe, with the files that count for each. */
+  /** The commits to describe. */
   commits: readonly LoggedCommit[]
   /** What the changed lines must match. */
   history: HistoryPattern
+  /** Which changed files count, from `path:` and `language:`. */
+  expr: FileExpr
   /** Most changed lines shown per file. */
   maxMatchesPerFile: number
   /** Kills git when aborted. */
