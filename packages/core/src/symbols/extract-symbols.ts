@@ -100,8 +100,10 @@ function qualify(found: readonly Found[], separator: string): Map<Found, string>
   const byNode = new Map<number, Found>()
   for (const entry of found) {
     byNode.set(entry.definition.id, entry)
-    const { parent } = entry.definition
-    if (entry.definition.type === 'function_declarator' && parent?.type === 'function_definition') byNode.set(parent.id, entry)
+    if (entry.definition.type !== 'function_declarator') continue
+    let parent = entry.definition.parent
+    while (parent?.type.endsWith('_declarator')) parent = parent.parent
+    if (parent?.type === 'function_definition') byNode.set(parent.id, entry)
   }
   const fileScoped = found.find(entry => entry.definition.type === FILE_SCOPED)
   const qualified = new Map<Found, string>()
