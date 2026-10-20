@@ -14,7 +14,12 @@ let layout: ArchiveLayout
 let dev: ReturnType<typeof Bun.serve>
 let app: AppServer
 let base: string
+let code: string
 let token: string
+
+function redeem(origin: string, given: string, headers: Record<string, string> = { origin }): Promise<Response> {
+  return fetch(`${origin}/api/session`, { method: 'POST', headers, body: JSON.stringify({ code: given }) })
+}
 
 beforeAll(async () => {
   root = mkdtempSync(join(tmpdir(), 'bundle-grep-serve-'))
@@ -31,7 +36,8 @@ beforeAll(async () => {
   app = (await serveApp({ layout, root, devServer: `http://127.0.0.1:${dev.port}` })).unwrap()
   const url = new URL(app.url)
   base = url.origin
-  token = url.hash.replace(/^#token=/, '')
+  code = url.hash.replace(/^#code=/, '')
+  token = ((await (await redeem(base, code)).json()) as { token: string }).token
 })
 
 afterAll(async () => {
@@ -41,8 +47,29 @@ afterAll(async () => {
 })
 
 describe('serveApp', () => {
-  test('listens on 127.0.0.1 and hands out the token in the fragment', () => {
-    expect(app.url).toMatch(/^http:\/\/127\.0\.0\.1:\d+\/#token=[\w-]{43}$/)
+  test('listens on 127.0.0.1 with a one-time code in the fragment', () => {
+    expect(app.url).toMatch(/^http:\/\/127\.0\.0\.1:\d+\/#code=[\w-]{43}$/)
+    expect(token).toMatch(/^[\w-]{43}$/)
+    expect(token).not.toBe(code)
+  })
+
+  test('the code is traded for the token once, and only from the server\'s own origin', async () => {
+    const other = (await serveApp({ layout, root, devServer: `http://127.0.0.1:${dev.port}` })).unwrap()
+    try {
+      const origin = new URL(other.url).origin
+      const fresh = new URL(other.url).hash.replace(/^#code=/, '')
+      expect((await redeem(origin, fresh, {})).status).toBe(403)
+      expect((await redeem(origin, fresh, { origin: 'http://evil.example' })).status).toBe(403)
+      expect((await redeem(origin, `${fresh.slice(1)}x`)).status).toBe(403)
+      expect((await fetch(`${origin}/api/session`)).status).toBe(403)
+      const traded = await redeem(origin, fresh)
+      expect(traded.status).toBe(200)
+      const { token: given } = (await traded.json()) as { token: string }
+      expect((await fetch(`${origin}/api/settings`, { headers: { [TOKEN_HEADER]: given } })).status).toBe(200)
+      expect(await (await redeem(origin, fresh)).json()).toMatchObject({ error: { _tag: 'ForbiddenError' } })
+    } finally {
+      await other.stop()
+    }
   })
 
   test('the API answers on the same origin', async () => {
@@ -58,6 +85,12 @@ describe('serveApp', () => {
     })
     const redirect = await fetch(`${base}/redirect`, { redirect: 'manual' })
     expect(redirect.status).toBe(302)
+  })
+
+  test('a path that looks like another host stays on the dev server', async () => {
+    using outside = Bun.serve({ hostname: '127.0.0.1', port: 0, fetch: () => new Response('outside') })
+    const response = await fetch(`${base}//127.0.0.1:${outside.port}/payload`)
+    expect(await response.json()).toMatchObject({ host: `127.0.0.1:${dev.port}` })
   })
 
   test('a request for another host is refused, UI included', async () => {

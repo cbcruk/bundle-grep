@@ -15,7 +15,7 @@ export interface ArchiveRouteOptions {
   root: string
 }
 
-/** Options for {@linkcode jobRoutes}. */
+/** Options for `jobRoutes`. */
 export interface JobRouteOptions extends ArchiveRouteOptions {
   /** The GitHub CLI to run; `gh` on the `PATH` by default. */
   gh?: string
@@ -27,7 +27,7 @@ export interface JobRouteOptions extends ArchiveRouteOptions {
   heartbeatMs?: number
 }
 
-/** The sync and restore routes {@linkcode jobRoutes} builds. */
+/** The sync and restore routes `jobRoutes` builds. */
 export interface JobRoutes {
   /** `POST /api/sync`. */
   sync: (request: Request) => Promise<Response>
@@ -46,7 +46,25 @@ export interface ApiOptions extends JobRouteOptions {
 /** Answers a request, or declines it with `undefined` so that another handler can. */
 export type ApiHandler = (request: Request) => Response | Promise<Response> | undefined
 
-/** Options for {@linkcode searchRoute}. */
+/** One `/api/` route: the method it answers, `HEAD` included for a `GET`, and how. */
+export interface ApiRoute {
+  /** The method it answers. */
+  method: 'GET' | 'POST'
+  /** Answers a request that passed the guard. */
+  handle: (request: Request) => Response | Promise<Response>
+}
+
+/** Options for `sessionRoute`. */
+export interface SessionRouteOptions {
+  /** The only `Host` header accepted, such as `"127.0.0.1:53124"`. */
+  host: string
+  /** The one-time code the page's URL carries. */
+  code: string
+  /** The token to hand out for it. */
+  token: string
+}
+
+/** Options for `searchRoute`. */
 export type SearchRouteOptions = Pick<ApiOptions, 'layout' | 'heartbeatMs'>
 
 /** Options for {@linkcode ndjsonResponse}. */
@@ -78,7 +96,7 @@ export interface ServeAppOptions extends Omit<JobRouteOptions, 'heartbeatMs'> {
 
 /** A running {@linkcode serveApp}. */
 export interface AppServer {
-  /** The page's URL, with this run's token in its fragment. */
+  /** The page's URL, with a one-time code for this run's token in its fragment. */
   url: string
   /** Stops a running sync or restore and closes every connection. */
   stop: () => Promise<void>
