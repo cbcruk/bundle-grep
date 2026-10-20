@@ -1,4 +1,5 @@
-(function_declarator declarator: (identifier) @name) @definition.function
+((function_declarator declarator: (identifier) @name) @definition.function
+  (#set! outside "compound_statement"))
 (struct_specifier name: (type_identifier) @name body: (_)) @definition.struct
 (union_specifier name: (type_identifier) @name body: (_)) @definition.struct
 (enum_specifier name: (type_identifier) @name body: (_)) @definition.enum

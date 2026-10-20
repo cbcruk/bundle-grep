@@ -6,16 +6,18 @@
 
 import { parseQuery, type QueryNode } from '@bundle-grep/core/query'
 
-function hasSymbol(node: QueryNode): boolean {
-  if (node.type === 'match') return node.field === 'symbol'
-  if (node.type === 'not') return hasSymbol(node.child)
-  if (node.type === 'and' || node.type === 'or') return node.children.some(hasSymbol)
+function hasSymbol(node: QueryNode, positive: boolean): boolean {
+  if (node.type === 'match') return positive && node.field === 'symbol'
+  if (node.type === 'not') return hasSymbol(node.child, !positive)
+  if (node.type === 'and' || node.type === 'or') return node.children.some(child => hasSymbol(child, positive))
   return false
 }
 
-/** Says whether a query has a `symbol:` qualifier, negated or not. */
+/** Says whether a query looks for definitions: a `symbol:` qualifier under an even number of negations. */
 export function usesSymbol(query: string): boolean {
-  return parseQuery(query).map(hasSymbol).unwrapOr(false)
+  return parseQuery(query)
+    .map(node => hasSymbol(node, true))
+    .unwrapOr(false)
 }
 
 /** Writes a count with its noun, such as `1 file` or `1,234 files`. */

@@ -32,10 +32,13 @@ const MAX_FILE_BYTES = 1024 * 1024
 /** How far into a file to look for a NUL byte, as git does to tell binary files apart. */
 const BINARY_PROBE_BYTES = 8000
 
+/** The stored format and extraction rules; raise it when either changes, so older indexes are rebuilt. */
+const VERSION = 1
+
 type StoredSymbol = [name: string, kind: SymbolKind, line: number, column: number]
 
 interface StoredIndex {
-  version: 1
+  version: typeof VERSION
   indexer: string
   commit: string
   files: Record<string, [oid: string, symbols: StoredSymbol[]]>
@@ -50,19 +53,23 @@ interface TreeFile {
 function isStoredIndex(value: unknown): value is StoredIndex {
   if (typeof value !== 'object' || value === null) return false
   const { version, indexer, commit, files } = value as Record<string, unknown>
-  return version === 1 && typeof indexer === 'string' && typeof commit === 'string' && typeof files === 'object' && files !== null
+  return version === VERSION && typeof indexer === 'string' && typeof commit === 'string' && typeof files === 'object' && files !== null
 }
 
-async function readStored(path: string): Promise<StoredIndex | undefined> {
+/** Reads a stored index, treating one that cannot be read or has the wrong shape as missing. */
+async function readStored(path: string): Promise<{ indexer: string; index: SymbolIndex } | undefined> {
   const text = await Result.tryPromise(() => readFile(path, 'utf8'))
   if (text.isErr()) return undefined
   const value = Result.try(() => JSON.parse(text.value) as unknown)
-  return value.isOk() && isStoredIndex(value.value) ? value.value : undefined
+  if (value.isErr() || !isStoredIndex(value.value)) return undefined
+  const stored = value.value
+  return Result.try(() => ({ indexer: stored.indexer, index: fromStored(stored) })).unwrapOr(undefined)
 }
 
 function fromStored(stored: StoredIndex): SymbolIndex {
   const files = new Map<string, IndexedFile>()
   for (const [path, [oid, symbols]] of Object.entries(stored.files)) {
+    if (typeof oid !== 'string') throw new TypeError(`Malformed entry for ${path}`)
     files.set(path, { oid, symbols: symbols.map(([name, kind, line, column]) => ({ name, kind, line, column })) })
   }
   return { commit: stored.commit, files }
@@ -73,7 +80,7 @@ function toStored(index: SymbolIndex): StoredIndex {
   for (const [path, { oid, symbols }] of index.files) {
     files[path] = [oid, symbols.map(({ name, kind, line, column }) => [name, kind, line, column])]
   }
-  return { version: 1, indexer: INDEXER, commit: index.commit, files }
+  return { version: VERSION, indexer: INDEXER, commit: index.commit, files }
 }
 
 /** Writes the index beside its destination and renames it into place; a failure only costs a rebuild later. */
@@ -106,8 +113,8 @@ function coveredFiles(lsTree: Buffer): TreeFile[] {
  * — see {@linkcode symbolLanguages} — and is cached in the bare repository,
  * keyed by commit and by the grammars and queries it was built with. When the
  * commit changes, files whose blob is unchanged keep their definitions and
- * only the rest are parsed again. Files over 1 MiB, binary files, and
- * symbolic links are left out.
+ * only the rest are parsed again. Files over 1 MiB and symbolic links are
+ * left out, and binary files are listed as defining nothing.
  *
  * Saving the index is best effort: a repository that cannot be written to is
  * indexed again next time.
@@ -135,12 +142,12 @@ export async function symbolIndex(
     const commit = resolved.stdout.toString('utf8').trim()
     const path = join(gitDir, INDEX_FILE)
     const stored = await readStored(path)
-    if (stored?.indexer === INDEXER && stored.commit === commit) return Result.ok(fromStored(stored))
+    if (stored?.indexer === INDEXER && stored.index.commit === commit) return Result.ok(stored.index)
 
     const key = (grammar: GrammarId, oid: string): string => `${grammar}:${oid}`
     const known = new Map<string, SymbolDefinition[]>()
     if (stored?.indexer === INDEXER) {
-      for (const [file, { oid, symbols }] of fromStored(stored).files) {
+      for (const [file, { oid, symbols }] of stored.index.files) {
         const grammar = grammarFor(file)
         if (grammar) known.set(key(grammar, oid), symbols)
       }

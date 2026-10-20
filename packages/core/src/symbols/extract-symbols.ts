@@ -4,18 +4,14 @@
  * @module
  */
 
-import { readFile } from 'node:fs/promises'
-
 import { Result } from 'better-result'
+import { readFile } from 'node:fs/promises'
 import runtimeWasm from 'web-tree-sitter/web-tree-sitter.wasm' with { type: 'file' }
-import { Language, Parser, Query } from 'web-tree-sitter'
+import { Language, Parser, Query, type Node } from 'web-tree-sitter'
 
 import { GRAMMARS } from './grammars'
 import { SymbolParserError } from './symbols.errors'
-import type { GrammarId, SymbolDefinition, SymbolKind } from './symbols.types'
-
-/** Finds the definitions in one file's text with the grammar given. */
-export type SymbolExtractor = (grammar: GrammarId, text: string) => SymbolDefinition[]
+import type { GrammarId, SymbolDefinition, SymbolExtractor, SymbolKind } from './symbols.types'
 
 interface Loaded {
   language: Language
@@ -26,6 +22,12 @@ const DEFINITION = 'definition.'
 
 let runtime: Promise<Result<void, SymbolParserError>> | undefined
 const loaded = new Map<GrammarId, Promise<Result<Loaded, SymbolParserError>>>()
+
+/** Says whether a node lies inside one of a type, such as a C declaration inside a function body. */
+function isInside(node: Node, type: string): boolean {
+  for (let parent = node.parent; parent; parent = parent.parent) if (parent.type === type) return true
+  return false
+}
 
 function failure(what: string, cause: unknown): SymbolParserError {
   return new SymbolParserError({ message: `Could not load ${what}: ${cause instanceof Error ? cause.message : String(cause)}` })
@@ -61,7 +63,9 @@ function loadGrammar(id: GrammarId): Promise<Result<Loaded, SymbolParserError>> 
  * Loading happens once per process; later calls reuse what was loaded. The
  * extractor is synchronous. A name captured by several patterns, such as a
  * method that is also a function, keeps the kind of the first pattern in the
- * query. A file the grammar cannot make sense of yields what it could parse,
+ * query. A pattern that sets `outside` to a node type, as with
+ * `(#set! outside "compound_statement")`, skips definitions inside such a
+ * node. A file the grammar cannot make sense of yields what it could parse,
  * and one tree-sitter fails on, or an extractor asked for a grammar it did
  * not load, yields nothing.
  *
@@ -91,6 +95,8 @@ export async function loadExtractor(grammars: Iterable<GrammarId>): Promise<Resu
         const name = match.captures.find(capture => capture.name === 'name')?.node
         const definition = match.captures.find(capture => capture.name.startsWith(DEFINITION))
         if (!name || !definition || name.text === '') continue
+        const outside = match.setProperties?.outside
+        if (outside && isInside(definition.node, outside)) continue
         const existing = found.get(name.startIndex)
         if (existing && existing.pattern <= match.patternIndex) continue
         const { row } = name.startPosition
@@ -105,6 +111,8 @@ export async function loadExtractor(grammars: Iterable<GrammarId>): Promise<Resu
         })
       }
       return [...found.entries()].sort(([a], [b]) => a - b).map(([, { symbol }]) => symbol)
+    } catch {
+      return []
     } finally {
       tree.delete()
     }

@@ -25,6 +25,19 @@ export type SymbolKind =
 /** The grammars symbols are extracted with. */
 export type GrammarId = 'c' | 'cpp' | 'csharp' | 'go' | 'java' | 'javascript' | 'python' | 'ruby' | 'rust' | 'tsx' | 'typescript'
 
+/** What extracting with one grammar needs. */
+export interface Grammar {
+  /** The grammar's WebAssembly file. */
+  wasm: string
+  /** The tags query, definitions only. */
+  query: string
+  /** The grammar package's version, which a change of invalidates every index. */
+  version: string
+}
+
+/** Finds the definitions in one file's text with the grammar given. */
+export type SymbolExtractor = (grammar: GrammarId, text: string) => SymbolDefinition[]
+
 /** One definition found in a file. */
 export interface SymbolDefinition {
   /** The defined name, such as `"useState"`. */

@@ -34,6 +34,7 @@ import tsxWasm from 'tree-sitter-typescript/tree-sitter-tsx.wasm' with { type: '
 import typescriptWasm from 'tree-sitter-typescript/tree-sitter-typescript.wasm' with { type: 'file' }
 
 import { languageOf } from '../plan/languages'
+import linguist from '../plan/languages.generated.json'
 import cQuery from './queries/c.scm' with { type: 'text' }
 import csharpQuery from './queries/c-sharp.scm' with { type: 'text' }
 import cppQuery from './queries/cpp.scm' with { type: 'text' }
@@ -45,17 +46,7 @@ import pythonQuery from './queries/python.scm' with { type: 'text' }
 import rubyQuery from './queries/ruby.scm' with { type: 'text' }
 import rustQuery from './queries/rust.scm' with { type: 'text' }
 import typescriptQuery from './queries/typescript.scm' with { type: 'text' }
-import type { GrammarId } from './symbols.types'
-
-/** What extracting with one grammar needs. */
-export interface Grammar {
-  /** The grammar's WebAssembly file. */
-  wasm: string
-  /** The tags query, definitions only. */
-  query: string
-  /** The grammar package's version, which a change of invalidates every index. */
-  version: string
-}
+import type { Grammar, GrammarId } from './symbols.types'
 
 /** The grammars by id. */
 export const GRAMMARS: Readonly<Record<GrammarId, Grammar>> = {
@@ -87,11 +78,12 @@ const BY_LANGUAGE: Readonly<Record<string, GrammarId>> = {
 }
 
 /**
- * Identifies the grammars and queries an index was built with, so an index
- * built by another version is rebuilt rather than trusted.
+ * Identifies the grammars, queries, and language data an index was built
+ * with, so an index built by another version is rebuilt rather than trusted.
  */
 export const INDEXER: string = createHash('sha256')
-  .update(JSON.stringify(Object.entries(GRAMMARS).map(([id, { query, version }]) => [id, version, query])))
+  .update(JSON.stringify([Object.entries(GRAMMARS).map(([id, { query, version }]) => [id, version, query]), BY_LANGUAGE]))
+  .update(JSON.stringify(linguist))
   .digest('hex')
   .slice(0, 16)
 

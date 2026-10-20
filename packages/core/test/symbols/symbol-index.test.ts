@@ -76,6 +76,11 @@ describe('symbolIndex', () => {
     expect(summary((await symbolIndex(gitDir)).unwrap())['src/a.ts']).toEqual(['alpha:1'])
     writeFileSync(indexFile(), JSON.stringify({ version: 1, indexer: 'other', commit: fixture.git('rev-parse', 'HEAD'), files: {} }))
     expect(summary((await symbolIndex(gitDir)).unwrap())['src/a.ts']).toEqual(['alpha:1'])
+    const stored = JSON.parse(readFileSync(indexFile(), 'utf8')) as { commit: string; files: Record<string, unknown> }
+    for (const files of [{ 'src/a.ts': 5 }, { 'src/a.ts': ['x', 5] }]) {
+      writeFileSync(indexFile(), JSON.stringify({ ...stored, commit: 'old', files }))
+      expect(summary((await symbolIndex(gitDir)).unwrap())['src/a.ts']).toEqual(['alpha:1'])
+    }
   })
 
   test('another ref can be indexed', async () => {
