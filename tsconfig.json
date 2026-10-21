@@ -22,7 +22,6 @@
     "packages/*/test",
     "apps/*/src",
     "apps/*/test",
-    "apps/*/www/*.ts",
     "scripts",
     "vitest.config.ts",
     "vitest.setup.ts"
