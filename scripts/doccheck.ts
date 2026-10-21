@@ -31,6 +31,7 @@ const examples: { file: string; code: string }[] = []
 for (const rel of globSync('{packages,apps}/*/{src,test}/**/*.{ts,tsx}', { cwd: ROOT }).sort()) {
   if (rel.endsWith('.test.ts') || rel.endsWith('.gen.ts')) continue
   const text = await readFile(join(ROOT, rel), 'utf8')
+  if (text.includes('@generated')) continue
   const lines = text.split('\n')
 
   let inType = false

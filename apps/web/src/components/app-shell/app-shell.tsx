@@ -1,16 +1,24 @@
+import { AppShell as AstryxAppShell } from '@astryxdesign/core/AppShell'
+import { useMediaQuery } from '@astryxdesign/core/hooks'
+import { TopNav, TopNavHeading, TopNavItem } from '@astryxdesign/core/TopNav'
 import { useEffect, useRef } from 'react'
 
 import { useGo } from '../../hooks/use-go'
 import { isTyping } from '../../lib/keyboard'
-import { Link } from '../link/link'
+import { routeHref } from '../../lib/route'
 import { SearchBox } from '../search-box/search-box'
 import type { AppShellProps } from './app-shell.types'
-import './app-shell.css'
 
-/** The header with the search box, above the screen. `/` focuses the search box from anywhere. */
-export function AppShell({ from, sources, children }: AppShellProps): React.JSX.Element {
+/**
+ * The top bar with the search box, above the screen. `/` focuses the search box from anywhere.
+ *
+ * Wider than 768px the search box sits centered between the name and the
+ * navigation; narrower, the name gives way and the search box takes its place.
+ */
+export function AppShell({ from, section, sources, children }: AppShellProps): React.JSX.Element {
   const go = useGo()
   const input = useRef<HTMLInputElement>(null)
+  const narrow = useMediaQuery('(max-width: 768px)')
 
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent): void => {
@@ -23,18 +31,25 @@ export function AppShell({ from, sources, children }: AppShellProps): React.JSX.
     return (): void => window.removeEventListener('keydown', onKeyDown)
   }, [])
 
+  const searchBox = (
+    <SearchBox query={from.q} sources={sources} inputRef={input} onSearch={q => go({ view: 'search', q })} />
+  )
+
   return (
-    <div className="app">
-      <header className="app-header">
-        <Link to={{ view: 'search', q: '' }} className="app-brand">
-          bundle-grep
-        </Link>
-        <SearchBox query={from.q} sources={sources} inputRef={input} onSearch={q => go({ view: 'search', q })} />
-        <Link to={{ view: 'repos', ...from }} className="app-nav">
-          Repositories
-        </Link>
-      </header>
-      <main className="app-main">{children}</main>
-    </div>
+    <AstryxAppShell
+      mobileNav={false}
+      topNav={
+        <TopNav
+          heading={narrow ? undefined : <TopNavHeading heading="bundle-grep" headingHref={routeHref({ view: 'search', q: '' })} />}
+          startContent={narrow ? searchBox : undefined}
+          centerContent={narrow ? undefined : searchBox}
+          endContent={
+            <TopNavItem label="Repositories" href={routeHref({ view: 'repos', ...from })} isSelected={section === 'repos'} />
+          }
+        />
+      }
+    >
+      {children}
+    </AstryxAppShell>
   )
 }

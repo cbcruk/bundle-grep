@@ -1,3 +1,9 @@
+import { Card } from '@astryxdesign/core/Card'
+import { Divider } from '@astryxdesign/core/Divider'
+import { HStack } from '@astryxdesign/core/Stack'
+import { Text } from '@astryxdesign/core/Text'
+import { Fragment } from 'react'
+
 import { hunks, segments } from '../../lib/highlight'
 import { fileRoute } from '../../lib/result-route'
 import { Link } from '../link/link'
@@ -7,21 +13,24 @@ import './file-result.css'
 
 /** One matching file: its path, language, and matching lines with their context. */
 export function FileResult({ from, file, selected, ref }: FileResultProps): React.JSX.Element {
-  const open = fileRoute(from, file)
   return (
-    <article ref={ref} className={selected ? 'file-result selected' : 'file-result'} aria-current={selected || undefined}>
-      <header className="file-result-header">
-        <Link to={open} className="file-result-path">
+    <Card ref={ref} padding={0} className="file-result" aria-current={selected || undefined}>
+      <HStack gap={2} paddingInline={3} paddingBlock={2} align="center" justify="between">
+        <Link to={fileRoute(from, file)} className="file-result-path" weight="semibold">
           {file.path}
         </Link>
-        {file.language && <span className="file-result-language">{file.language}</span>}
-      </header>
+        {file.language && <Text type="supporting">{file.language}</Text>}
+      </HStack>
+      <Divider />
       {file.lines.length === 0 ? (
-        <p className="file-result-path-only">Matched on its path.</p>
+        <HStack paddingInline={3} paddingBlock={2}>
+          <Text color="secondary">Matched on its path.</Text>
+        </HStack>
       ) : (
-        <div className="file-result-lines">
-          {hunks(file.lines).map(hunk => (
-            <table key={hunk[0]!.number} className="code">
+        hunks(file.lines).map((hunk, index) => (
+          <Fragment key={hunk[0]!.number}>
+            {index > 0 && <Divider />}
+            <table className="code">
               <tbody>
                 {hunk.map(line => (
                   <CodeLine
@@ -34,9 +43,9 @@ export function FileResult({ from, file, selected, ref }: FileResultProps): Reac
                 ))}
               </tbody>
             </table>
-          ))}
-        </div>
+          </Fragment>
+        ))
       )}
-    </article>
+    </Card>
   )
 }

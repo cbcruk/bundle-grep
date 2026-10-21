@@ -4,7 +4,7 @@
  * @module
  */
 
-import type { ApiResult, RepoList, Settings } from '../../api/api.types'
+import type { ApiResult, RepoList, RepoRow, Settings } from '../../api/api.types'
 import type { QuerySearch } from '../../lib/route.types'
 
 /** Props for {@linkcode ReposView}. */
@@ -18,3 +18,6 @@ export interface ReposViewProps {
   /** Called after a sync or restore, so the list can be loaded again. */
   onChanged: () => Promise<void>
 }
+
+/** A {@linkcode RepoRow} as the repository table takes it. */
+export type RepoTableRow = { [K in keyof RepoRow]: RepoRow[K] }

@@ -7,7 +7,7 @@ export function CodeLine({ number, to, replace, segments, context, change, marke
   return (
     <tr className={classes} id={id}>
       <td className="code-number">
-        <Link to={to} replace={replace} title={`Line ${number}`}>
+        <Link to={to} replace={replace} color="secondary">
           {number}
         </Link>
       </td>

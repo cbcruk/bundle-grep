@@ -19,7 +19,7 @@ export interface FileResultProps {
   /** `true` when the keyboard cursor is on this file. */
   selected: boolean
   /** The card's element, for scrolling it into view. */
-  ref?: Ref<HTMLElement>
+  ref?: Ref<HTMLDivElement>
 }
 
 /** Props for {@linkcode CodeLine}. */

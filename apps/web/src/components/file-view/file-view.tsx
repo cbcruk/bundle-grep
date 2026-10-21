@@ -1,14 +1,23 @@
+import { Banner } from '@astryxdesign/core/Banner'
+import { BreadcrumbItem, Breadcrumbs } from '@astryxdesign/core/Breadcrumbs'
+import { Card } from '@astryxdesign/core/Card'
+import { Code } from '@astryxdesign/core/Code'
+import { Divider } from '@astryxdesign/core/Divider'
+import { Layout, LayoutContent } from '@astryxdesign/core/Layout'
+import { HStack, VStack } from '@astryxdesign/core/Stack'
+import { Text } from '@astryxdesign/core/Text'
 import { useEffect } from 'react'
 
 import { useGo } from '../../hooks/use-go'
 import { segments } from '../../lib/highlight'
 import { isTyping } from '../../lib/keyboard'
+import { routeHref } from '../../lib/route'
 import { CodeLine } from '../file-result/code-line'
 import { Link } from '../link/link'
 import type { Route } from '../../lib/route.types'
 import type { FileViewProps } from './file-view.types'
 import { lineId } from './file-view.utils'
-import './file-view.css'
+import '../file-result/file-result.css'
 
 /**
  * One file at `HEAD`, or at the commit the route names, with line numbers.
@@ -35,57 +44,64 @@ export function FileView({ route, blob, highlights }: FileViewProps): React.JSX.
     return (): void => window.removeEventListener('keydown', onKeyDown)
   }, [route.q, route.more, go])
 
+  const parts = route.path.split('/')
   return (
-    <div className="file-view">
-      <nav className="file-view-crumbs" aria-label="Breadcrumbs">
-        {route.q && (
-          <Link to={back} className="file-view-back">
-            ← Results
-          </Link>
-        )}
-        <Link to={{ view: 'search', q: `repo:${route.repo}` }}>{route.repo}</Link>
-        {route.path.split('/').map((segment, index, all) => (
-          <span key={index}>
-            <span className="file-view-separator">/</span>
-            {index === all.length - 1 ? <strong>{segment}</strong> : segment}
-          </span>
-        ))}
-        {route.ref && (
-          <code className="file-view-ref" title={route.ref}>
-            @ {route.ref.slice(0, 7)}
-          </code>
-        )}
-      </nav>
-      <div className="file-view-body">
-        {!blob.ok && <p className="file-view-message danger">{blob.error.message}</p>}
-        {blob.ok && blob.value.kind === 'binary' && (
-          <p className="file-view-message">Binary file ({blob.value.size.toLocaleString('en')} bytes) not shown.</p>
-        )}
-        {lines && (
-          <>
-            <p className="file-view-meta">{lines.length.toLocaleString('en')} lines</p>
-            <table className="code">
-              <tbody>
-                {lines.map((text, index) => {
-                  const number = index + 1
-                  return (
-                    <CodeLine
-                      key={number}
-                      id={lineId(number)}
-                      number={number}
-                      to={{ ...route, line: number }}
-                      replace
-                      segments={segments(text, highlights.get(number) ?? [])}
-                      context={false}
-                      marked={number === route.line}
-                    />
-                  )
-                })}
-              </tbody>
-            </table>
-          </>
-        )}
-      </div>
-    </div>
+    <Layout
+      content={
+        <LayoutContent>
+          <VStack gap={3}>
+            <HStack gap={4} align="center" wrap="wrap">
+              {route.q && (
+                <Link to={back} isStandalone>
+                  ← Results
+                </Link>
+              )}
+              <Breadcrumbs label="File">
+                <BreadcrumbItem href={routeHref({ view: 'search', q: `repo:${route.repo}` })} isCurrent={false}>
+                  {route.repo}
+                </BreadcrumbItem>
+                {parts.map((segment, index) => (
+                  <BreadcrumbItem key={index} isCurrent={index === parts.length - 1}>
+                    {segment}
+                  </BreadcrumbItem>
+                ))}
+              </Breadcrumbs>
+              {route.ref && <Code color="secondary">@ {route.ref.slice(0, 7)}</Code>}
+            </HStack>
+            {!blob.ok && <Banner status="error" title={blob.error.message} />}
+            {blob.ok && blob.value.kind === 'binary' && (
+              <Text color="secondary">Binary file ({blob.value.size.toLocaleString('en')} bytes) not shown.</Text>
+            )}
+            {lines && (
+              <Card padding={0}>
+                <HStack paddingInline={3} paddingBlock={2}>
+                  <Text type="supporting">{lines.length.toLocaleString('en')} lines</Text>
+                </HStack>
+                <Divider />
+                <table className="code">
+                  <tbody>
+                    {lines.map((text, index) => {
+                      const number = index + 1
+                      return (
+                        <CodeLine
+                          key={number}
+                          id={lineId(number)}
+                          number={number}
+                          to={{ ...route, line: number }}
+                          replace
+                          segments={segments(text, highlights.get(number) ?? [])}
+                          context={false}
+                          marked={number === route.line}
+                        />
+                      )
+                    })}
+                  </tbody>
+                </table>
+              </Card>
+            )}
+          </VStack>
+        </LayoutContent>
+      }
+    />
   )
 }
