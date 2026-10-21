@@ -12,4 +12,6 @@ export interface QueryErrorProps {
   query: string
   /** The error, with the span of the query it points at, if any. */
   error: WireError
+  /** Lifts the error above the page with a shadow, for when it floats over other content. */
+  isFloating?: boolean
 }

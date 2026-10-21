@@ -11,6 +11,7 @@ import { isPageKey, isTyping } from '../src/lib/keyboard'
 import { fileRouteOf, parseSearchString, routeHref, stringifySearchObject, validateFileSearch, validateQuerySearch } from '../src/lib/route'
 import { changeRoute, commitRoute, fileRoute, routeHighlights } from '../src/lib/result-route'
 import { usesHistory, usesSymbol } from '../src/components/results/results.utils'
+import { routesClick } from '../src/components/route-anchor/route-anchor.utils'
 
 describe('usesSymbol', () => {
   test('finds a positive symbol: qualifier anywhere in a query that parses', () => {
@@ -195,5 +196,22 @@ describe('isPageKey', () => {
       expect(isPageKey({ ...key, target: { tagName } as unknown as EventTarget })).toBe(false)
     }
     expect(isPageKey({ ...key, ctrlKey: true, target: null })).toBe(false)
+  })
+})
+
+describe('routesClick', () => {
+  const plain = { defaultPrevented: false, button: 0, metaKey: false, ctrlKey: false, shiftKey: false, altKey: false }
+
+  test('routes a plain left click on an in-page link', () => {
+    expect(routesClick(plain, '/repos')).toBe(true)
+    expect(routesClick(plain, '/repos', '_self')).toBe(true)
+  })
+
+  test('leaves new tabs, other buttons, taken clicks, and missing addresses to the browser', () => {
+    for (const key of ['metaKey', 'ctrlKey', 'shiftKey', 'altKey'] as const) expect(routesClick({ ...plain, [key]: true }, '/repos')).toBe(false)
+    expect(routesClick({ ...plain, button: 1 }, '/repos')).toBe(false)
+    expect(routesClick({ ...plain, defaultPrevented: true }, '/repos')).toBe(false)
+    expect(routesClick(plain, '/repos', '_blank')).toBe(false)
+    expect(routesClick(plain, undefined)).toBe(false)
   })
 })

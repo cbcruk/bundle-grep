@@ -21,3 +21,9 @@ export interface ReposViewProps {
 
 /** A {@linkcode RepoRow} as the repository table takes it. */
 export type RepoTableRow = { [K in keyof RepoRow]: RepoRow[K] }
+
+/** Props for the time cells of the repository table. */
+export interface WhenProps {
+  /** The time, or nothing when it is unknown. */
+  iso: string | null | undefined
+}

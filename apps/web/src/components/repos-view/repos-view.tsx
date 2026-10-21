@@ -16,12 +16,20 @@ import { useEffect, useRef, useState, type FormEvent } from 'react'
 import type { RestoreItem, SyncItem, WireError } from '../../api/api.types'
 import { runJob } from '../../api/run-job'
 import { Link } from '../link/link'
-import type { RepoTableRow, ReposViewProps } from './repos-view.types'
+import type { RepoTableRow, ReposViewProps, WhenProps } from './repos-view.types'
 import { itemText, STATE_DOT, STATE_LABEL } from './repos-view.utils'
 
-/** Shows an ISO 8601 time, or `—` when unknown. */
-function When({ iso }: { iso: string | null | undefined }): React.JSX.Element {
-  return iso ? <Timestamp value={iso} format="date_time" type="body" color="primary" /> : <Text color="secondary">—</Text>
+/**
+ * Shows an ISO 8601 time, or `—` when unknown.
+ *
+ * The time is written in the browser's time zone, which the server cannot
+ * know, so the server renders the date alone and the browser fills in the rest.
+ */
+function When({ iso }: WhenProps): React.JSX.Element {
+  const [mounted, setMounted] = useState(false)
+  useEffect(() => setMounted(true), [])
+  if (!iso) return <Text color="secondary">—</Text>
+  return mounted ? <Timestamp value={iso} format="date_time" type="body" color="primary" /> : <Text>{iso.slice(0, 10)}</Text>
 }
 
 const COLUMNS: TableColumn<RepoTableRow>[] = [
@@ -47,7 +55,7 @@ const COLUMNS: TableColumn<RepoTableRow>[] = [
     renderCell: repo => (
       <HStack gap={2} align="center">
         <StatusDot variant={STATE_DOT[repo.state]} label={STATE_LABEL[repo.state]} />
-        <Text>{STATE_LABEL[repo.state]}</Text>
+        <Text aria-hidden>{STATE_LABEL[repo.state]}</Text>
       </HStack>
     ),
   },

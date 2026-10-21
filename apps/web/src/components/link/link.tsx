@@ -3,6 +3,7 @@ import type { MouseEvent } from 'react'
 
 import { useGo } from '../../hooks/use-go'
 import { routeHref } from '../../lib/route'
+import { routesClick } from '../route-anchor/route-anchor.utils'
 import type { LinkProps } from './link.types'
 
 /**
@@ -13,13 +14,14 @@ import type { LinkProps } from './link.types'
  */
 export function Link({ to, replace, className, color, size, weight, isStandalone, children }: LinkProps): React.JSX.Element {
   const go = useGo()
+  const href = routeHref(to)
   const onClick = (event: MouseEvent): void => {
-    if (event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return
+    if (!routesClick(event, href)) return
     event.preventDefault()
     go(to, { replace })
   }
   return (
-    <AstryxLink href={routeHref(to)} className={className} color={color} size={size} weight={weight} isStandalone={isStandalone} onClick={onClick}>
+    <AstryxLink href={href} className={className} color={color} size={size} weight={weight} isStandalone={isStandalone} onClick={onClick}>
       {children}
     </AstryxLink>
   )
