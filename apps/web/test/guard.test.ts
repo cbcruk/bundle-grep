@@ -40,8 +40,11 @@ describe('guardRequest', () => {
     expect(guardRequest(request('/', { cookie: `bundle_grep_4101=${config.token}` }), config)?.status).toBe(403)
   })
 
-  test('lets /session through to trade its code', () => {
+  test('lets a GET of /session through to trade its code, and nothing else', () => {
     expect(guardRequest(request('/session?code=x'), config)).toBeUndefined()
+    for (const method of ['POST', 'PUT', 'DELETE', 'OPTIONS']) {
+      expect(guardRequest(request('/session', {}, method), config)?.status).toBe(403)
+    }
   })
 })
 

@@ -28,7 +28,7 @@ const MEMBER = /^  (?!#|\/|\*|\})(?:readonly |static |async |get |set )*[A-Za-z_
 const missing: string[] = []
 const examples: { file: string; code: string }[] = []
 
-for (const rel of globSync('{packages,apps}/*/{src,test}/**/*.ts', { cwd: ROOT }).sort()) {
+for (const rel of globSync('{packages,apps}/*/{src,test}/**/*.{ts,tsx}', { cwd: ROOT }).sort()) {
   if (rel.endsWith('.test.ts') || rel.endsWith('.gen.ts')) continue
   const text = await readFile(join(ROOT, rel), 'utf8')
   const lines = text.split('\n')

@@ -5,6 +5,7 @@ import { Facets } from '../../components/facets/facets'
 import { Results } from '../../components/results/results'
 import { StartPage } from '../../components/start-page/start-page'
 import { useGo } from '../../hooks/use-go'
+import { isBlankQuery } from '../../lib/route'
 import { SearchContext } from '../../lib/search-context'
 import { LIMIT, MAX_LIMIT } from '../../lib/search-limits'
 
@@ -18,7 +19,7 @@ function SearchScreen(): React.JSX.Element {
   const search = use(SearchContext)
   const { symbolLanguages } = root.useLoaderData()
   const go = useGo()
-  if (q === '') return <StartPage />
+  if (isBlankQuery(q)) return <StartPage />
   return (
     <div className="app-search">
       {search.status !== 'error' && <Facets query={q} facets={search.done?.facets} />}

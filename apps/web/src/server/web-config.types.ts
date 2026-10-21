@@ -35,3 +35,9 @@ export interface WebState {
   /** Whether a sync or restore is running. */
   busy: boolean
 }
+
+/**
+ * Where {@linkcode WebState} is kept: on `globalThis`, under a registered
+ * symbol, so that it survives the dev server reloading modules.
+ */
+export type WebStateHolder = Record<symbol, WebState | undefined>

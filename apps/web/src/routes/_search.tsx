@@ -2,7 +2,7 @@ import { Outlet, createFileRoute } from '@tanstack/react-router'
 
 import { searchArchive } from '../functions/search.functions'
 import { useSearch } from '../hooks/use-search'
-import { validateQuerySearch } from '../lib/route'
+import { isBlankQuery, validateQuerySearch } from '../lib/route'
 import { SearchContext } from '../lib/search-context'
 import { CONTEXT, LIMIT, MAX_LIMIT } from '../lib/search-limits'
 
@@ -20,7 +20,7 @@ export const Route = createFileRoute('/_search')({
   validateSearch: validateQuerySearch,
   loaderDeps: ({ search }) => ({ q: search.q, more: search.more }),
   loader: async ({ deps, abortController }) => {
-    if (deps.q.trim() === '') return { events: undefined }
+    if (isBlankQuery(deps.q)) return { events: undefined }
     const data = { q: deps.q, limit: deps.more ? MAX_LIMIT : LIMIT, context: CONTEXT }
     return { events: await searchArchive({ data, signal: abortController.signal }) }
   },
