@@ -25,7 +25,7 @@ const KEY = Symbol.for('bundle-grep.web-state')
  * configure({
  *   layout: { archiveDir: "./archive", cacheDir: "./cache" },
  *   root: ".",
- *   host: "127.0.0.1:4100",
+ *   port: 4100,
  *   code: "one-time-code",
  *   token: "session-secret",
  * });
@@ -63,7 +63,7 @@ function devConfig(): WebConfig {
   return {
     layout: { archiveDir: join(root, 'archive'), cacheDir: join(root, 'cache') },
     root,
-    host: `127.0.0.1:${process.env.BUNDLE_GREP_DEV_PORT ?? '5173'}`,
+    port: Number(process.env.BUNDLE_GREP_DEV_PORT ?? '5173'),
     code,
     token: randomBytes(32).toString('base64url'),
   }

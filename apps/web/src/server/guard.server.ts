@@ -21,8 +21,8 @@ export function sameSecret(given: string, expected: string): boolean {
  * Browsers share cookies between ports of one host, so two runs on different
  * ports keep separate cookies rather than overwriting each other's.
  */
-export function cookieName(config: Pick<WebConfig, 'host'>): string {
-  return `bundle_grep_${config.host.split(':').at(-1)}`
+export function cookieName(config: Pick<WebConfig, 'port'>): string {
+  return `bundle_grep_${config.port}`
 }
 
 function cookieValue(request: Request, name: string): string | undefined {
@@ -43,17 +43,16 @@ function forbidden(message: string): Response {
 /**
  * Checks a request before any page or server function sees it.
  *
- * - The `Host` header must be the server's own. A page that reached the port
- *   through DNS rebinding sends its own host name, so it is turned away even
- *   though the socket is local.
- * - Every request but a `GET` or `HEAD` of `/session` needs the session
- *   cookie, which only the browser that traded this run's code holds. It is
- *   `SameSite=Strict`, so a page on another site cannot send it along.
+ * Every request but a `GET` or `HEAD` of `/session` needs the session cookie,
+ * which only the browser that traded this run's code holds. It is
+ * `SameSite=Strict`, so a page on another site cannot send it along, and it
+ * belongs to the host name the browser traded the code on, so a page that
+ * reached the port through DNS rebinding has none either. The `Host` header
+ * is not checked, so `localhost` and a forwarded port work too.
  *
  * @returns A refusal, or `undefined` when the request may proceed.
  */
 export function guardRequest(request: Request, config: WebConfig): Response | undefined {
-  if (request.headers.get('host') !== config.host) return forbidden('Unexpected Host header')
   const redeeming = request.method === 'GET' || request.method === 'HEAD'
   if (redeeming && new URL(request.url).pathname === '/session') return undefined
   if (!sameSecret(cookieValue(request, cookieName(config)) ?? '', config.token)) {
