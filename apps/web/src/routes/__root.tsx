@@ -1,10 +1,16 @@
+import '@astryxdesign/core/reset.css'
+import '@astryxdesign/core/astryx.css'
+import { Banner } from '@astryxdesign/core/Banner'
+import { LinkProvider } from '@astryxdesign/core/Link'
+import { Theme } from '@astryxdesign/core/theme'
 import { HeadContent, Outlet, Scripts, createRootRoute, useRouterState } from '@tanstack/react-router'
 import { useMemo, type ReactNode } from 'react'
 
+import { defaultThemeSlug, themes } from '../astryx-themes'
 import { AppShell } from '../components/app-shell/app-shell'
+import { RouteAnchor } from '../components/route-anchor/route-anchor'
 import { getArchiveIndex } from '../functions/archive.functions'
 import { validateQuerySearch } from '../lib/route'
-import styles from '../styles.css?url'
 
 /** The document, the header with the search box, and the repositories and names completion offers. */
 export const Route = createRootRoute({
@@ -15,17 +21,14 @@ export const Route = createRootRoute({
       { name: 'color-scheme', content: 'light dark' },
       { title: 'bundle-grep' },
     ],
-    links: [
-      { rel: 'stylesheet', href: styles },
-      { rel: 'icon', href: 'data:,' },
-    ],
+    links: [{ rel: 'icon', href: 'data:,' }],
   }),
   loader: () => getArchiveIndex(),
   staleTime: Infinity,
   shellComponent: Document,
   component: Root,
-  notFoundComponent: () => <p className="notice">Nothing is at this address.</p>,
-  errorComponent: ({ error }) => <p className="notice danger">{error instanceof Error ? error.message : String(error)}</p>,
+  notFoundComponent: () => <Banner status="warning" title="Nothing is at this address." />,
+  errorComponent: ({ error }) => <Banner status="error" title={error instanceof Error ? error.message : String(error)} />,
 })
 
 function Document({ children }: { children: ReactNode }): React.JSX.Element {
@@ -35,7 +38,9 @@ function Document({ children }: { children: ReactNode }): React.JSX.Element {
         <HeadContent />
       </head>
       <body>
-        {children}
+        <Theme theme={themes[defaultThemeSlug]}>
+          <LinkProvider component={RouteAnchor}>{children}</LinkProvider>
+        </Theme>
         <Scripts />
       </body>
     </html>
@@ -45,10 +50,11 @@ function Document({ children }: { children: ReactNode }): React.JSX.Element {
 function Root(): React.JSX.Element {
   const { repos, languages } = Route.useLoaderData()
   const search = useRouterState({ select: state => state.location.search as Record<string, unknown> })
+  const section = useRouterState({ select: state => (state.location.pathname === '/repos' ? 'repos' : 'search') })
   const from = useMemo(() => validateQuerySearch(search), [search])
   const sources = useMemo(() => ({ repos: repos.ok ? repos.value.repos.map(repo => repo.name) : [], languages }), [repos, languages])
   return (
-    <AppShell from={from} sources={sources}>
+    <AppShell from={from} section={section} sources={sources}>
       <Outlet />
     </AppShell>
   )

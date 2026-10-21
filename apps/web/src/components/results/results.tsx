@@ -1,3 +1,10 @@
+import { Banner } from '@astryxdesign/core/Banner'
+import { Button } from '@astryxdesign/core/Button'
+import { EmptyState } from '@astryxdesign/core/EmptyState'
+import { Heading } from '@astryxdesign/core/Heading'
+import { List, ListItem } from '@astryxdesign/core/List'
+import { HStack, VStack } from '@astryxdesign/core/Stack'
+import { Text } from '@astryxdesign/core/Text'
 import { useEffect, useMemo, useRef, useState } from 'react'
 
 import { useGo } from '../../hooks/use-go'
@@ -12,7 +19,6 @@ import { QueryError } from '../query-error/query-error'
 import type { CommitResult as CommitEvent, FileResult as FileEvent } from '../../hooks/use-search.types'
 import type { ResultsProps } from './results.types'
 import { plural, usesHistory, usesSymbol } from './results.utils'
-import './results.css'
 
 /**
  * The results column: a summary, archive warnings, failures, and the
@@ -26,7 +32,7 @@ export function Results({ query, more, search, limit, maxLimit, onShowMore, symb
   const from = useMemo(() => (more ? { q: query, more } : { q: query }), [query, more])
   const [selected, setSelected] = useState(-1)
   const go = useGo()
-  const cards = useRef<(HTMLElement | null)[]>([])
+  const cards = useRef<(HTMLDivElement | null)[]>([])
   const { status, archive, files, commits, failures, done, error } = search
   const history = usesHistory(query)
   const items = useMemo((): (FileEvent | CommitEvent)[] => [...files, ...commits], [files, commits])
@@ -68,73 +74,76 @@ export function Results({ query, more, search, limit, maxLimit, onShowMore, symb
   const total = (history ? done?.totalCommits : done?.totalFiles) ?? items.length
 
   return (
-    <div className="results">
-      <p className="results-summary" aria-live="polite">
-        {status === 'running' ? (
-          <>Searching… {plural(items.length, noun)} so far</>
-        ) : (
-          <>
-            {done?.capped ? `${total.toLocaleString('en')}+ ${noun}s` : plural(total, noun)}
-            {done?.truncated && ` (showing the first ${items.length.toLocaleString('en')})`}
-            {done?.stopped === 'timeout' && ' — stopped early because the search took too long'}
-          </>
-        )}
+    <VStack gap={4}>
+      <HStack gap={3} align="center" wrap="wrap">
+        <Text aria-live="polite">
+          {status === 'running' ? (
+            <>Searching… {plural(items.length, noun)} so far</>
+          ) : (
+            <>
+              {done?.capped ? `${total.toLocaleString('en')}+ ${noun}s` : plural(total, noun)}
+              {done?.truncated && ` (showing the first ${items.length.toLocaleString('en')})`}
+              {done?.stopped === 'timeout' && ' — stopped early because the search took too long'}
+            </>
+          )}
+        </Text>
         {done?.truncated && limit < maxLimit && (
-          <button type="button" className="results-more" onClick={onShowMore}>
-            Show up to {maxLimit.toLocaleString('en')}
-          </button>
+          <Button label={`Show up to ${maxLimit.toLocaleString('en')}`} size="sm" onClick={onShowMore} />
         )}
-      </p>
+      </HStack>
 
       {archive && archive.repos === 0 && archive.unrestored.length === 0 && (
-        <p className="notice">
-          Nothing is archived yet. <Link to={{ view: 'repos', q: query }}>Add repositories</Link> to search them.
-        </p>
+        <Banner
+          status="info"
+          title="Nothing is archived yet."
+          endContent={<Link to={{ view: 'repos', q: query }}>Add repositories</Link>}
+        />
       )}
       {archive && archive.unrestored.length > 0 && (
-        <p className="notice">
-          {plural(archive.unrestored.length, 'repository', 'repositories')} cannot be searched until restored.{' '}
-          <Link to={{ view: 'repos', q: query }}>Restore</Link>
-        </p>
+        <Banner
+          status="warning"
+          title={`${plural(archive.unrestored.length, 'repository', 'repositories')} cannot be searched until restored.`}
+          endContent={<Link to={{ view: 'repos', q: query }}>Restore</Link>}
+        />
       )}
       {archive && archive.invalid.length > 0 && (
-        <details className="notice">
-          <summary>{plural(archive.invalid.length, 'archive entry', 'archive entries')} could not be read</summary>
-          <ul>
+        <Banner
+          status="warning"
+          title={`${plural(archive.invalid.length, 'archive entry', 'archive entries')} could not be read`}
+          collapsible={{ defaultIsOpen: false }}
+        >
+          <List listStyle="disc">
             {archive.invalid.map(message => (
-              <li key={message}>{message}</li>
+              <ListItem key={message} label={message} />
             ))}
-          </ul>
-        </details>
+          </List>
+        </Banner>
       )}
       {failures.map(failure => (
-        <p key={failure.repo} className="notice danger">
-          <strong>{failure.repo}</strong> could not be searched: {failure.error.message}
-        </p>
+        <Banner key={failure.repo} status="error" title={`${failure.repo} could not be searched`} description={failure.error.message} />
       ))}
 
       {status === 'done' && items.length === 0 && archive && archive.repos > 0 && (
-        <p className="results-empty">
-          {history ? 'No commits matched.' : 'No files matched.'}
-          {usesSymbol(query) && symbolLanguages.length > 0 && (
-            <>
-              {' '}
-              <code>symbol:</code> finds definitions in {symbolLanguages.join(', ')} files only.
-            </>
-          )}
-        </p>
+        <EmptyState
+          title={history ? 'No commits matched.' : 'No files matched.'}
+          description={
+            usesSymbol(query) && symbolLanguages.length > 0
+              ? `symbol: finds definitions in ${symbolLanguages.join(', ')} files only.`
+              : undefined
+          }
+        />
       )}
 
       {groups.map(group => (
-        <section key={group.repo} className="results-repo">
-          <h2>
-            <Link to={{ view: 'search', q: toggleFacet(query, { kind: 'repo', value: group.repo }) }} title="Search this repository only">
+        <VStack key={group.repo} as="section" gap={2}>
+          <Heading level={2}>
+            <Link to={{ view: 'search', q: toggleFacet(query, { kind: 'repo', value: group.repo }) }} color="primary" size="lg" weight="semibold">
               {group.repo}
             </Link>
-          </h2>
+          </Heading>
           {group.files.map(item => {
             const index = indexOf.get(item)!
-            const ref = (element: HTMLElement | null): void => {
+            const ref = (element: HTMLDivElement | null): void => {
               cards.current[index] = element
             }
             return item.type === 'file' ? (
@@ -143,8 +152,8 @@ export function Results({ query, more, search, limit, maxLimit, onShowMore, symb
               <CommitResult key={item.commit.sha} ref={ref} from={from} result={item} selected={index === selected} />
             )
           })}
-        </section>
+        </VStack>
       ))}
-    </div>
+    </VStack>
   )
 }

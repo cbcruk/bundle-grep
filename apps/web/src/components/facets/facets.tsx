@@ -1,8 +1,12 @@
+import { Button } from '@astryxdesign/core/Button'
+import { Heading } from '@astryxdesign/core/Heading'
+import { List, ListItem } from '@astryxdesign/core/List'
+import { HStack, VStack } from '@astryxdesign/core/Stack'
+import { Text } from '@astryxdesign/core/Text'
 import { useState } from 'react'
 
 import { hasFacet, toggleFacet } from '../../lib/query-edit'
-import { Link } from '../link/link'
-import './facets.css'
+import { routeHref } from '../../lib/route'
 import type { FacetGroupProps, FacetsProps } from './facets.types'
 import { facetLabel } from './facets.utils'
 
@@ -15,48 +19,47 @@ function FacetGroup({ title, kind, query, counts }: FacetGroupProps): React.JSX.
   if (entries.length === 0) return null
   const shown = expanded ? entries : entries.slice(0, COLLAPSED)
   return (
-    <section className="facet-group">
-      <h3>{title}</h3>
-      <ul>
+    <VStack gap={1}>
+      <List header={<Heading level={3}>{title}</Heading>} density="compact" edgeCompensation="inline">
         {shown.map(([value, count]) => {
           const facet = { kind, value }
-          const selected = hasFacet(query, facet)
           return (
-            <li key={value}>
-              <Link
-                to={{ view: 'search', q: toggleFacet(query, facet) }}
-                className={selected ? 'facet selected' : 'facet'}
-                title={selected ? 'Remove this filter' : 'Filter to this'}
-              >
-                <span className="facet-name">{facetLabel(facet)}</span>
-                <span className="facet-count">{count}</span>
-              </Link>
-            </li>
+            <ListItem
+              key={value}
+              label={facetLabel(facet)}
+              href={routeHref({ view: 'search', q: toggleFacet(query, facet) })}
+              isSelected={hasFacet(query, facet)}
+              endContent={
+                <Text type="supporting" hasTabularNumbers>
+                  {count}
+                </Text>
+              }
+            />
           )
         })}
-      </ul>
+      </List>
       {entries.length > COLLAPSED && (
-        <button type="button" className="facet-more" onClick={() => setExpanded(!expanded)}>
-          {expanded ? 'Show less' : `Show ${entries.length - COLLAPSED} more`}
-        </button>
+        <HStack>
+          <Button
+            label={expanded ? 'Show less' : `Show ${entries.length - COLLAPSED} more`}
+            variant="ghost"
+            size="sm"
+            onClick={() => setExpanded(!expanded)}
+          />
+        </HStack>
       )}
-    </section>
+    </VStack>
   )
 }
 
-/** The sidebar: matching files per language, repository, and top-level directory, each a filter to toggle. */
+/** The filters: matching files per language, repository, and top-level directory, each a filter to toggle. */
 export function Facets({ query, facets }: FacetsProps): React.JSX.Element {
+  if (!facets) return <Text color="secondary">Filters appear when the search finishes.</Text>
   return (
-    <aside className="facets" aria-label="Filters">
-      {facets ? (
-        <>
-          <FacetGroup title="Languages" kind="language" query={query} counts={facets.languages} />
-          <FacetGroup title="Repositories" kind="repo" query={query} counts={facets.repos} />
-          <FacetGroup title="Paths" kind="path" query={query} counts={facets.paths} />
-        </>
-      ) : (
-        <p className="facets-pending">Filters appear when the search finishes.</p>
-      )}
-    </aside>
+    <VStack gap={6}>
+      <FacetGroup title="Languages" kind="language" query={query} counts={facets.languages} />
+      <FacetGroup title="Repositories" kind="repo" query={query} counts={facets.repos} />
+      <FacetGroup title="Paths" kind="path" query={query} counts={facets.paths} />
+    </VStack>
   )
 }

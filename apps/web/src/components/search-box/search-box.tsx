@@ -1,3 +1,5 @@
+import { List, ListItem } from '@astryxdesign/core/List'
+import { TextInput } from '@astryxdesign/core/TextInput'
 import { parseQuery } from '@bundle-grep/core/query'
 import { useEffect, useRef, useState, type FormEvent, type KeyboardEvent } from 'react'
 
@@ -30,6 +32,10 @@ export function SearchBox({ query, sources, onSearch, inputRef }: SearchBoxProps
     setCaret(query.length)
     setError(undefined)
   }, [query])
+
+  useEffect(() => {
+    if (inputRef.current) inputRef.current.spellcheck = false
+  }, [inputRef])
 
   useEffect(() => {
     if (pendingCaret.current === undefined) return
@@ -84,54 +90,54 @@ export function SearchBox({ query, sources, onSearch, inputRef }: SearchBoxProps
 
   return (
     <form className="search-box" role="search" onSubmit={submit}>
-      <input
+      <TextInput
         ref={inputRef}
-        className="search-box-input"
+        label="Search query"
+        isLabelHidden
         value={value}
         placeholder="Search code, e.g. useState language:typescript"
-        aria-label="Search query"
         aria-autocomplete="list"
         aria-expanded={showing}
         aria-controls="search-suggestions"
-        spellCheck={false}
         autoComplete="off"
-        autoFocus
-        onChange={event => {
-          setValue(event.target.value)
-          setCaret(event.target.selectionStart ?? event.target.value.length)
+        hasAutoFocus
+        width="100%"
+        onChange={(next, event) => {
+          setValue(next)
+          setCaret(event.target.selectionStart ?? next.length)
           setActive(0)
           setPicked(false)
           setOpen(true)
         }}
-        onSelect={event => setCaret(event.currentTarget.selectionStart ?? 0)}
+        onSelect={() => setCaret(inputRef.current?.selectionStart ?? 0)}
         onKeyDown={onKeyDown}
         onBlur={() => setOpen(false)}
         onFocus={() => setOpen(true)}
       />
       {showing && (
-        <ul className="search-box-suggestions" id="search-suggestions" role="listbox">
-          {suggestions.map((suggestion, index) => (
-            <li
-              key={suggestion.insert}
-              role="option"
-              aria-selected={picked && index === active}
-              className={picked && index === active ? 'active' : undefined}
-              onMouseDown={event => {
-                event.preventDefault()
-                accept(suggestion)
-              }}
-              onMouseEnter={() => {
-                setActive(index)
-                setPicked(true)
-              }}
-            >
-              {suggestion.label}
-            </li>
-          ))}
-        </ul>
+        <div className="search-box-popup">
+          <List id="search-suggestions" role="listbox" aria-label="Suggestions" density="compact">
+            {suggestions.map((suggestion, index) => (
+              <ListItem
+                key={suggestion.insert}
+                role="option"
+                label={suggestion.label}
+                isSelected={picked && index === active}
+                onMouseDown={event => {
+                  event.preventDefault()
+                  accept(suggestion)
+                }}
+                onMouseEnter={() => {
+                  setActive(index)
+                  setPicked(true)
+                }}
+              />
+            ))}
+          </List>
+        </div>
       )}
       {error && (
-        <div className="search-box-error">
+        <div className="search-box-popup">
           <QueryError query={error.query} error={error.error} />
         </div>
       )}

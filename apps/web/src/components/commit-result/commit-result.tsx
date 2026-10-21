@@ -1,10 +1,16 @@
+import { Card } from '@astryxdesign/core/Card'
+import { Code } from '@astryxdesign/core/Code'
+import { Divider } from '@astryxdesign/core/Divider'
+import { HStack, StackItem } from '@astryxdesign/core/Stack'
+import { Text } from '@astryxdesign/core/Text'
+import { Fragment } from 'react'
+
 import { segments } from '../../lib/highlight'
 import { changeRoute } from '../../lib/result-route'
 import { CodeLine } from '../file-result/code-line'
 import { Link } from '../link/link'
 import type { CommitResultProps } from './commit-result.types'
 import '../file-result/file-result.css'
-import './commit-result.css'
 
 /**
  * One commit a `history:` search found: its id, date, author, and subject,
@@ -16,24 +22,26 @@ import './commit-result.css'
 export function CommitResult({ from, result, selected, ref }: CommitResultProps): React.JSX.Element {
   const { repo, commit, files } = result
   return (
-    <article ref={ref} className={selected ? 'file-result selected' : 'file-result'} aria-current={selected || undefined}>
-      <header className="file-result-header commit-result-header">
-        <code className="commit-result-sha" title={commit.sha}>
-          {commit.sha.slice(0, 7)}
-        </code>
-        <span className="commit-result-subject">{commit.subject}</span>
-        <span className="commit-result-meta">
-          {commit.author} · <time dateTime={commit.date}>{commit.date.slice(0, 10)}</time>
-        </span>
-      </header>
+    <Card ref={ref} padding={0} className="file-result" aria-current={selected || undefined}>
+      <HStack gap={2} paddingInline={3} paddingBlock={2} align="center">
+        <Code color="secondary">{commit.sha.slice(0, 7)}</Code>
+        <StackItem size="fill">
+          <Text weight="semibold">{commit.subject}</Text>
+        </StackItem>
+        <Text type="supporting">
+          {commit.author} · {commit.date.slice(0, 10)}
+        </Text>
+      </HStack>
       {files.map(file => (
-        <section key={file.path} className="commit-result-file">
-          <div className="commit-result-path">
-            <Link to={changeRoute(from, repo, commit, file.path, file.lines[0])} className="file-result-path">
+        <Fragment key={file.path}>
+          <Divider />
+          <HStack gap={2} paddingInline={3} paddingBlock={1} align="center" justify="between">
+            <Link to={changeRoute(from, repo, commit, file.path, file.lines[0])} className="file-result-path" weight="semibold">
               {file.path}
             </Link>
-            {file.language && <span className="file-result-language">{file.language}</span>}
-          </div>
+            {file.language && <Text type="supporting">{file.language}</Text>}
+          </HStack>
+          <Divider />
           <table className="code">
             <tbody>
               {file.lines.map(line => (
@@ -48,8 +56,8 @@ export function CommitResult({ from, result, selected, ref }: CommitResultProps)
               ))}
             </tbody>
           </table>
-        </section>
+        </Fragment>
       ))}
-    </article>
+    </Card>
   )
 }

@@ -19,5 +19,5 @@ export interface CommitResultProps {
   /** `true` when the keyboard cursor is on this commit. */
   selected: boolean
   /** The card's element, for scrolling it into view. */
-  ref?: Ref<HTMLElement>
+  ref?: Ref<HTMLDivElement>
 }

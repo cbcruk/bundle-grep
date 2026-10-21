@@ -13,6 +13,8 @@ import type { QuerySearch } from '../../lib/route.types'
 export interface AppShellProps {
   /** The search the address carries: the search box shows its query, and the repository list goes back to it. */
   from: QuerySearch
+  /** The screen showing, whose navigation item is selected. */
+  section: 'search' | 'repos'
   /** Where completions come from. */
   sources: CompletionSources
   /** The screen. */

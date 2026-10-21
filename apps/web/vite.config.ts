@@ -50,6 +50,7 @@ function bundledPackages(): Plugin {
 export default defineConfig(
   ({ command }): UserConfig => ({
     server: { host: '127.0.0.1', port: PORT, strictPort: true },
+    resolve: { alias: { '@astryxdesign/theme-neutral/fonts.css': join(import.meta.dirname, 'src/no-fonts.css') } },
     ssr: command === 'build' ? { noExternal: true } : undefined,
     plugins: [devSession(), bundledPackages(), tanstackStart(), viteReact()],
   }),
