@@ -1,3 +1,4 @@
+import { cpSync } from 'node:fs'
 import { defineConfig } from 'tsdown'
 
 import { thirdPartyLicenses } from './third-party-licenses.ts'
@@ -15,11 +16,10 @@ export default defineConfig({
   fixedExtension: true,
   deps: { onlyBundle: false },
   plugins: [
-    thirdPartyLicenses([
-      { from: '../core', names: GRAMMARS.map(name => `tree-sitter-${name}`) },
-      { from: '../../apps/desktop', names: ['react', 'react-dom'] },
-      { from: '../../apps/desktop/node_modules/react-dom', names: ['scheduler'] },
-    ]),
+    thirdPartyLicenses(
+      [{ from: '../core', names: GRAMMARS.map(name => `tree-sitter-${name}`) }],
+      ['../../apps/web/dist/client.packages.json', '../../apps/web/dist/ssr.packages.json'],
+    ),
   ],
   copy: [
     {
@@ -29,6 +29,10 @@ export default defineConfig({
       ],
       to: 'dist/wasm',
     },
-    { from: '../../apps/desktop/www/dist/index.html', to: 'dist/ui' },
   ],
+  hooks: {
+    'build:done': (): void => {
+      for (const part of ['client', 'server']) cpSync(`../../apps/web/dist/${part}`, `dist/web/${part}`, { recursive: true })
+    },
+  },
 })

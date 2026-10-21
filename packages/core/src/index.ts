@@ -81,6 +81,7 @@ export type {
 } from './sync/sync.types'
 export { targetFromUrl } from './sync/target-from-url'
 export { symbolLanguages } from './symbols/grammars'
+export { setWasmResolver, wasmFile } from './symbols/wasm-file'
 export { SymbolParserError } from './symbols/symbols.errors'
 export { symbolIndex } from './symbols/symbol-index'
 export type {

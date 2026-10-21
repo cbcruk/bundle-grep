@@ -42,9 +42,11 @@ function noticeOf(dir: string): Notice {
 
 /**
  * Emits `THIRD_PARTY_LICENSES.md` with the license of every package bundled
- * into the output, plus `shipped` ones that reach the package another way.
+ * into the output, plus `shipped` ones that reach the package another way,
+ * plus those other builds bundled, as JSON arrays of package directories in
+ * the `manifests` files.
  */
-export function thirdPartyLicenses(shipped: ShippedPackages[]): TsdownPlugin {
+export function thirdPartyLicenses(shipped: ShippedPackages[], manifests: string[] = []): TsdownPlugin {
   return {
     name: 'third-party-licenses',
     generateBundle(): void {
@@ -56,6 +58,9 @@ export function thirdPartyLicenses(shipped: ShippedPackages[]): TsdownPlugin {
       for (const { from, names } of shipped) {
         const require = createRequire(join(resolve(from), 'noop.js'))
         for (const name of names) dirs.add(dirname(require.resolve(`${name}/package.json`)))
+      }
+      for (const manifest of manifests) {
+        for (const dir of JSON.parse(readFileSync(resolve(manifest), 'utf8')) as string[]) dirs.add(dir)
       }
       const notices = new Map<string, Notice>()
       for (const dir of dirs) {

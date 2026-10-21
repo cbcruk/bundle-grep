@@ -17,15 +17,14 @@ import { batchSshEnv, hasSshCommandConfig } from '../ssh-env'
 const USAGE = `Usage: bundle-grep ui [options]
 
 Serves the search page from 127.0.0.1 only, prints its URL and opens it in the
-default browser. The URL carries a code that works once, for the first page
+default browser. The URL carries a code that works once, for the first browser
 that opens it. Runs until Ctrl-C.
 
 Options:
-  --port <n>          listen on this port (default any free one)
-  --no-open           print the URL without opening a browser
-  --dev-server <url>  load the UI from a dev server, such as http://localhost:5173
-  --root <dir>        where the archive lives (default $BUNDLE_GREP_ROOT or ~/.bundle-grep)
-  -h, --help          show this help
+  --port <n>    listen on this port (default any free one)
+  --no-open     print the URL without opening a browser
+  --root <dir>  where the archive lives (default $BUNDLE_GREP_ROOT or ~/.bundle-grep)
+  -h, --help    show this help
 `
 
 function portOf(text: string): number | null {
@@ -37,7 +36,6 @@ function portOf(text: string): number | null {
 async function run(args: string[], io: Io): Promise<number> {
   const errors = stylesFor(io.errorColor)
   const parsed = parseCommandArgs(args, {
-    'dev-server': { type: 'string' },
     port: { type: 'string' },
     'no-open': { type: 'boolean' },
   })
@@ -54,26 +52,20 @@ async function run(args: string[], io: Io): Promise<number> {
     io.error(`Unexpected argument "${positionals[0]}"\n\n${USAGE}`)
     return EXIT.error
   }
-  const devServer = values['dev-server']
-  if (devServer !== undefined && !URL.canParse(devServer)) {
-    io.error(`--dev-server must be a URL, not "${devServer}"\n\n${USAGE}`)
-    return EXIT.error
-  }
-
   const port = values.port === undefined ? undefined : portOf(values.port)
   if (port === null) {
     io.error(`--port must be a whole number from 1 to 65535, not "${values.port}"\n\n${USAGE}`)
     return EXIT.error
   }
 
-  const { openBrowser, serveApp } = await import('@bundle-grep/desktop')
+  const { serveWeb } = await import('../ui/serve-web')
+  const { openBrowser } = await import('../ui/open-browser')
   const layout = layoutFor(values.root, io.env)
-  const served = await serveApp({
+  const served = await serveWeb({
     layout,
     root: dirname(layout.archiveDir),
     gh: io.gh,
     syncEnv: batchSshEnv(io.env, false, hasSshCommandConfig()),
-    devServer,
     port,
     signal: io.signal,
   })

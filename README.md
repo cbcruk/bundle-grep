@@ -42,13 +42,14 @@ commands one JSON object per line.
 
 `ui` serves the search page on `127.0.0.1` and opens it in the default
 browser. It also prints the URL, for `--no-open` or a browser that did not
-start, and runs until Ctrl-C. The URL ends in `#code=…`, which the first page
-to open it trades for that run's secret token, so open it once, as printed;
-a reload keeps working in that tab. Requests from other sites, or for another
-host name, are refused. Other users on the same machine can see the URL in
-the process list while the browser starts, so on a shared machine one of them
-could trade the code first and reach the archive; the page would then say the
-link was already used.
+start, and runs until Ctrl-C. The URL ends in `/session?code=…`, a code that
+works once: the first browser to open it gets a session cookie for that run,
+so open it once, as printed; the browser stays signed in until `ui` stops.
+Every other request without the cookie is refused, and requests from other
+sites cannot send it. Other users on the same machine can see the URL in the
+process list while the browser starts, so on a shared machine one of them
+could trade the code first and reach the archive; the link would then say it
+was already used.
 
 ### Keeping the archive current
 
@@ -172,26 +173,17 @@ pnpm docs:check
 pnpm test
 ```
 
-The search page is a Vite + React app in `apps/desktop/www`. Build it
-into one HTML file before running `bundle-grep ui` or packing, or work on it
-with the dev server, which `ui --dev-server` proxies:
+The search page is a TanStack Start app in `apps/web`, rendered on the
+server. Build it before running `bundle-grep ui` from a checkout or packing,
+or work on it with its dev server, which reads the archive under
+`BUNDLE_GREP_ROOT` (or `~/.bundle-grep`) and prints a one-time session link
+to open:
 
 ```sh
-pnpm build                                             # the UI, then the CLI bundle in packages/cli/dist
+pnpm build                                             # apps/web/dist, then the CLI bundle in packages/cli/dist
 pnpm --filter bundle-grep pack                         # bundle-grep-<version>.tgz
 
-pnpm dev:ui                                            # Vite on 127.0.0.1:5173
-pnpm cli ui --dev-server http://127.0.0.1:5173
-```
-
-Its replacement, a TanStack Start app with server rendering, is in
-`apps/web`; `bundle-grep ui` does not serve it yet. Its dev server reads the
-archive under `BUNDLE_GREP_ROOT` (or `~/.bundle-grep`) and prints a one-time
-session link to open:
-
-```sh
 pnpm dev:web                                           # Vite on 127.0.0.1:5173
-pnpm build:web                                         # apps/web/dist/{client,server}
 ```
 
 `scripts/smoke-test.sh <executable> [version]` runs an installed
@@ -213,4 +205,4 @@ In the search page, `/` focuses the search box, `j`/`k` move between results,
 | --- | --- |
 | `packages/core` | Sync and restore bundles, parse and compile queries, run searches |
 | `packages/cli` | The `bundle-grep` command |
-| `apps/desktop` | The search page and the local-only server behind it |
+| `apps/web` | The search page: a TanStack Start app the `ui` command serves |

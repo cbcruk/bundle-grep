@@ -28,8 +28,8 @@
   },
   "devDependencies": {
     "@bundle-grep/core": "workspace:*",
-    "@bundle-grep/desktop": "workspace:*",
     "better-result": "^3.0.1",
+    "srvx": "1.0.6",
     "string-width": "8.3.0"
   }
 }

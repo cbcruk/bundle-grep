@@ -24,6 +24,8 @@ export interface WebConfig {
   syncEnv?: Record<string, string | undefined>
   /** Stops a running sync or restore, such as when the server stops. */
   signal?: AbortSignal
+  /** Finds the WebAssembly files `symbol:` needs, for a bundled server that cannot find them itself. */
+  wasmFile?: (specifier: string) => string
 }
 
 /** What the server remembers between requests of one run. */

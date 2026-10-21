@@ -54,8 +54,13 @@ for _ in $(seq 100); do
   sleep 0.1
 done
 url=$(grep -o 'http://[^ ]*' "$work/ui.log" | head -n 1) || fail "ui printed no URL: $(cat "$work/ui.log")"
-curl -fsS -o "$work/page.html" "${url%%#*}" || fail "ui does not answer"
+origin=${url%%/session*}
+session=$(curl -sS -o /dev/null -w '%{http_code}' -c "$work/cookies" "$url") || fail "ui does not answer"
+if [[ $session != 303 ]]; then fail "redeeming the session link answered $session, not 303"; fi
+curl -fsS -b "$work/cookies" -o "$work/page.html" "$origin/" || fail "ui rejects the session cookie"
 grep -q '<title>bundle-grep</title>' "$work/page.html" || fail "ui does not serve the search page"
+curl -fsS -b "$work/cookies" -o "$work/symbols.html" "$origin/?q=symbol%3AgreetSmoke" || fail "ui search failed"
+grep -q 'src/greet.ts' "$work/symbols.html" || fail "ui symbol: search found nothing"
 kill -INT "$ui"
 for _ in $(seq 100); do
   if ! kill -0 "$ui" 2>/dev/null; then break; fi

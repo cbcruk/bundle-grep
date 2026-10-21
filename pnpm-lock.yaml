@@ -106,12 +106,12 @@ importers:
       '@bundle-grep/core':
         specifier: workspace:*
         version: link:../core
-      '@bundle-grep/desktop':
-        specifier: workspace:*
-        version: link:../../apps/desktop
       better-result:
         specifier: ^3.0.1
         version: 3.0.1
+      srvx:
+        specifier: 1.0.6
+        version: 1.0.6
       string-width:
         specifier: 8.3.0
         version: 8.3.0

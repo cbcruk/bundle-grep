@@ -2,7 +2,7 @@
 
 Archives git repositories as bundles and searches them with GitHub-style code
 search queries through `git grep`. The roadmap lives in issue #14; `bundle-grep
-ui` serves the search page from `apps/desktop`.
+ui` serves the search page, a TanStack Start app in `apps/web`.
 
 ## Rules
 
