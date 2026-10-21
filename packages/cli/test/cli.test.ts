@@ -1,10 +1,9 @@
 import { afterAll, beforeAll, describe, expect, test } from 'vitest'
-import { chmodSync, mkdirSync, readFileSync, rmSync, symlinkSync, writeFileSync } from 'node:fs'
+import { chmodSync, existsSync, mkdirSync, readFileSync, rmSync, symlinkSync, writeFileSync } from 'node:fs'
 import { dirname, join } from 'node:path'
 import { setTimeout as sleep } from 'node:timers/promises'
 
 import { createFixtureRepo, isolateGitConfig, type FixtureRepo } from '../../core/test/fixture'
-import { listen } from '../../core/test/listen'
 import type { Io } from '../src/cli.types'
 import { run } from '../src/run'
 
@@ -239,9 +238,7 @@ describe('bundle-grep', () => {
     expect(help.code).toBe(0)
     expect(help.stdout).toStartWith('Usage: bundle-grep ui')
     expect((await cli('ui', 'extra')).code).toBe(2)
-    const bad = await cli('ui', '--dev-server', 'localhost')
-    expect(bad.code).toBe(2)
-    expect(bad.stderr).toStartWith('--dev-server must be a URL, not "localhost"')
+    expect((await cli('ui', '--dev-server', 'http://127.0.0.1:5173')).code).toBe(2)
     for (const port of ['0', '65536', 'http', '1.5']) {
       const badPort = await cli('ui', '--port', port)
       expect(badPort.code).toBe(2)
@@ -249,24 +246,34 @@ describe('bundle-grep', () => {
     }
   })
 
-  test('ui serves until interrupted, printing the URL', async () => {
-    await using dev = await listen(() => new Response('page'))
+  const built = existsSync(join(import.meta.dirname, '../../../apps/web/dist/server/server.js'))
+
+  test.skipIf(!built && !process.env.CI)('ui serves the built web app until interrupted', async () => {
     const interrupt = new AbortController()
     let stdout = ''
-    const running = cliWith(
-      { signal: interrupt.signal, write: text => void (stdout += text) },
-      'ui',
-      '--no-open',
-      '--dev-server',
-      dev.origin,
-    )
+    const running = cliWith({ signal: interrupt.signal, write: text => void (stdout += text) }, 'ui', '--no-open')
     while (!stdout.includes('\n')) await sleep(10)
     const url = /http:\/\/\S+/.exec(stdout)![0]
-    expect(await (await fetch(url)).text()).toBe('page')
+    expect(url).toMatch(/^http:\/\/127\.0\.0\.1:\d+\/session\?code=[\w-]+$/)
+    const origin = new URL(url).origin
+
+    expect((await fetch(origin)).status).toBe(403)
+    const session = await fetch(url, { redirect: 'manual' })
+    expect(session.status).toBe(303)
+    const cookie = session.headers.get('set-cookie')!.split(';')[0]!
+    expect((await fetch(url, { redirect: 'manual' })).status).toBe(403)
+
+    const page = await (await fetch(origin, { headers: { cookie } })).text()
+    expect(page).toContain('<title>bundle-grep</title>')
+    const symbols = await (await fetch(`${origin}/?q=${encodeURIComponent('symbol:n repo:acme/app')}`, { headers: { cookie } })).text()
+    expect(symbols).toContain('src/counter.ts')
+    const asset = /\/assets\/[\w-]+\.js/.exec(page)![0]
+    expect((await fetch(`${origin}${asset}`)).status).toBe(200)
+
     interrupt.abort()
     expect(await running).toMatchObject({ code: 0, stderr: '' })
     expect(stdout).toBe(`bundle-grep is serving ${url}\nPress Ctrl-C to stop.\n`)
-    await expect(fetch(url)).rejects.toThrow()
+    await expect(fetch(origin)).rejects.toThrow()
   })
 
   test('search rejects bad numbers and missing queries', async () => {

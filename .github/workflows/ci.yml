@@ -42,7 +42,7 @@ jobs:
         run: pnpm docs:check
 
       - name: Build
-        run: pnpm build && pnpm build:web
+        run: pnpm build
 
       - name: Test
         run: pnpm test

@@ -36,13 +36,13 @@ jobs:
           fi
           echo "version=$version" >> "$GITHUB_OUTPUT"
 
-      - name: Build the UI
-        run: pnpm build:ui
+      - name: Build the web app
+        run: pnpm build:web
 
       - name: Check
         run: pnpm typecheck && pnpm lint && pnpm docs:check && pnpm test
 
-      # prepack builds the CLI bundle around the UI built above.
+      # prepack builds the CLI bundle around the web app built above.
       - name: Pack
         run: |
           mkdir out

@@ -90,8 +90,6 @@ try {
         paths: {
           '@bundle-grep/core': [join(ROOT, 'packages/core/src/index.ts')],
           '@bundle-grep/core/query': [join(ROOT, 'packages/core/src/query/index.ts')],
-          '@bundle-grep/desktop': [join(ROOT, 'apps/desktop/src/index.ts')],
-          '@bundle-grep/web/server': [join(ROOT, 'apps/web/src/server/web-config.server.ts')],
         },
       },
       files,
