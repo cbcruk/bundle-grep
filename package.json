@@ -7,7 +7,7 @@
     "node": ">=24"
   },
   "scripts": {
-    "typecheck": "tsc --noEmit && tsc --noEmit -p apps/desktop/www",
+    "typecheck": "tsc --noEmit && tsc --noEmit -p apps/desktop/www && tsc --noEmit -p apps/web",
     "lint": "oxlint",
     "docs:check": "tsx scripts/doccheck.ts",
     "test": "vitest run",
@@ -15,7 +15,9 @@
     "dev:ui": "pnpm --filter @bundle-grep/desktop dev",
     "build:ui": "pnpm --filter @bundle-grep/desktop build",
     "cli": "tsx packages/cli/src/main.ts",
-    "build": "pnpm build:ui && pnpm --filter bundle-grep build"
+    "build": "pnpm build:ui && pnpm --filter bundle-grep build",
+    "dev:web": "pnpm --filter @bundle-grep/web dev",
+    "build:web": "pnpm --filter @bundle-grep/web build"
   },
   "devDependencies": {
     "@types/node": "^24.19.2",

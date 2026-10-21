@@ -29,7 +29,7 @@ const missing: string[] = []
 const examples: { file: string; code: string }[] = []
 
 for (const rel of globSync('{packages,apps}/*/{src,test}/**/*.ts', { cwd: ROOT }).sort()) {
-  if (rel.endsWith('.test.ts')) continue
+  if (rel.endsWith('.test.ts') || rel.endsWith('.gen.ts')) continue
   const text = await readFile(join(ROOT, rel), 'utf8')
   const lines = text.split('\n')
 
@@ -91,6 +91,7 @@ try {
           '@bundle-grep/core': [join(ROOT, 'packages/core/src/index.ts')],
           '@bundle-grep/core/query': [join(ROOT, 'packages/core/src/query/index.ts')],
           '@bundle-grep/desktop': [join(ROOT, 'apps/desktop/src/index.ts')],
+          '@bundle-grep/web/server': [join(ROOT, 'apps/web/src/server/web-config.server.ts')],
         },
       },
       files,

@@ -1,8 +1,14 @@
 {
   "$schema": "./node_modules/oxlint/configuration_schema.json",
-  "plugins": ["typescript"],
+  "plugins": [
+    "typescript"
+  ],
   "rules": {
     "typescript/explicit-function-return-type": "error"
   },
-  "ignorePatterns": ["node_modules", "dist"]
+  "ignorePatterns": [
+    "node_modules",
+    "dist",
+    "*.gen.ts"
+  ]
 }

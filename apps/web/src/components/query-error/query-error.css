@@ -1,0 +1,25 @@
+.query-error {
+  border: 1px solid var(--danger-border);
+  background: var(--danger-bg);
+  border-radius: 6px;
+  padding: 8px 12px;
+  margin: 0 0 16px;
+}
+
+.query-error-message {
+  margin: 0 0 4px;
+  color: var(--danger-fg);
+}
+
+.query-error-query {
+  font: var(--mono);
+  white-space: pre-wrap;
+  word-break: break-all;
+}
+
+.query-error-query mark {
+  background: none;
+  color: var(--danger-fg);
+  text-decoration: underline wavy var(--danger-fg);
+  text-underline-offset: 3px;
+}
