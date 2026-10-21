@@ -44,10 +44,11 @@ function Document({ children }: { children: ReactNode }): React.JSX.Element {
 
 function Root(): React.JSX.Element {
   const { repos, languages } = Route.useLoaderData()
-  const query = useRouterState({ select: state => validateQuerySearch(state.location.search as Record<string, unknown>).q })
+  const search = useRouterState({ select: state => state.location.search as Record<string, unknown> })
+  const from = useMemo(() => validateQuerySearch(search), [search])
   const sources = useMemo(() => ({ repos: repos.ok ? repos.value.repos.map(repo => repo.name) : [], languages }), [repos, languages])
   return (
-    <AppShell query={query} sources={sources}>
+    <AppShell from={from} sources={sources}>
       <Outlet />
     </AppShell>
   )

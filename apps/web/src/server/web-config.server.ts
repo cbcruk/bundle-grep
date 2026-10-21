@@ -8,11 +8,9 @@ import { randomBytes } from 'node:crypto'
 import { homedir } from 'node:os'
 import { join, resolve } from 'node:path'
 
-import type { WebConfig, WebState } from './web-config.types'
+import type { WebConfig, WebState, WebStateHolder } from './web-config.types'
 
 const KEY = Symbol.for('bundle-grep.web-state')
-
-type Holder = { [KEY]?: WebState }
 
 /**
  * Sets this run's configuration, before the server takes requests.
@@ -34,7 +32,7 @@ type Holder = { [KEY]?: WebState }
  * ```
  */
 export function configure(config: WebConfig): void {
-  ;(globalThis as Holder)[KEY] = { config, codeUsed: false, busy: false }
+  ;(globalThis as WebStateHolder)[KEY] = { config, codeUsed: false, busy: false }
 }
 
 /**
@@ -48,7 +46,7 @@ export function configure(config: WebConfig): void {
  * @throws When nothing configured it and no dev server set a code.
  */
 export function webState(): WebState {
-  const holder = globalThis as Holder
+  const holder = globalThis as WebStateHolder
   holder[KEY] ??= { config: devConfig(), codeUsed: false, busy: false }
   return holder[KEY]
 }

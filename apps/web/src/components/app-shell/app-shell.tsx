@@ -8,7 +8,7 @@ import type { AppShellProps } from './app-shell.types'
 import './app-shell.css'
 
 /** The header with the search box, above the screen. `/` focuses the search box from anywhere. */
-export function AppShell({ query, sources, children }: AppShellProps): React.JSX.Element {
+export function AppShell({ from, sources, children }: AppShellProps): React.JSX.Element {
   const go = useGo()
   const input = useRef<HTMLInputElement>(null)
 
@@ -29,8 +29,8 @@ export function AppShell({ query, sources, children }: AppShellProps): React.JSX
         <Link to={{ view: 'search', q: '' }} className="app-brand">
           bundle-grep
         </Link>
-        <SearchBox query={query} sources={sources} inputRef={input} onSearch={q => go({ view: 'search', q })} />
-        <Link to={{ view: 'repos', q: query }} className="app-nav">
+        <SearchBox query={from.q} sources={sources} inputRef={input} onSearch={q => go({ view: 'search', q })} />
+        <Link to={{ view: 'repos', ...from }} className="app-nav">
           Repositories
         </Link>
       </header>

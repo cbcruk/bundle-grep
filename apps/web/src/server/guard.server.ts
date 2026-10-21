@@ -46,7 +46,8 @@ function forbidden(message: string): Response {
  * - The `Host` header must be the server's own. A page that reached the port
  *   through DNS rebinding sends its own host name, so it is turned away even
  *   though the socket is local.
- * - Every path but `/session` needs the session cookie, which only the
+ * - Every request but a `GET` or `HEAD` of `/session` needs the session
+ *   cookie, which only the
  *   browser that traded this run's code holds. It is `SameSite=Strict`, so a
  *   page on another site cannot send it along.
  *
@@ -54,7 +55,8 @@ function forbidden(message: string): Response {
  */
 export function guardRequest(request: Request, config: WebConfig): Response | undefined {
   if (request.headers.get('host') !== config.host) return forbidden('Unexpected Host header')
-  if (new URL(request.url).pathname === '/session') return undefined
+  const redeeming = request.method === 'GET' || request.method === 'HEAD'
+  if (redeeming && new URL(request.url).pathname === '/session') return undefined
   if (!sameSecret(cookieValue(request, cookieName(config)) ?? '', config.token)) {
     return forbidden('This browser has no session for this run; open the URL `bundle-grep ui` printed')
   }

@@ -100,6 +100,7 @@ describe('route', () => {
     expect(routeHref({ view: 'search', q: 'x', more: true })).toBe('/?q=x&more=true')
     expect(routeHref({ view: 'repos', q: '' })).toBe('/repos')
     expect(routeHref({ view: 'repos', q: 'x' })).toBe('/repos?q=x')
+    expect(routeHref({ view: 'repos', q: 'x', more: true })).toBe('/repos?q=x&more=true')
     expect(routeHref({ view: 'file', q: 'x', repo: 'me/app', path: 'src/a b#?.ts', line: 12 })).toBe(
       '/file/me/app/src/a%20b%23%3F.ts?q=x&line=12',
     )
@@ -128,7 +129,10 @@ describe('route', () => {
     }
   })
 
-  test('drops what a screen cannot show', () => {
+  test('drops what a screen cannot show, as undefined so the raw value cannot show through', () => {
+    expect(validateQuerySearch({ q: 'x', more: 'false' })).toHaveProperty('more', undefined)
+    expect(validateFileSearch({ ref: 'main', line: '0' })).toEqual({ ref: undefined, line: undefined })
+    expect(validateFileSearch({ ref: 'main' })).toHaveProperty('ref', undefined)
     expect(validateQuerySearch({})).toEqual({ q: '' })
     expect(validateQuerySearch({ q: 'x', more: 'yes' })).toEqual({ q: 'x' })
     expect(validateFileSearch({ line: '-1', ref: 'main' })).toEqual({})

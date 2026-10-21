@@ -12,7 +12,7 @@ import './repos-view.css'
  * button to rebuild search caches. Sync and restore run one at a time, and
  * list what happened to each repository as it happens.
  */
-export function ReposView({ query, repos, settings, onChanged }: ReposViewProps): React.JSX.Element {
+export function ReposView({ from, repos, settings, onChanged }: ReposViewProps): React.JSX.Element {
   const [sources, setSources] = useState('')
   const [running, setRunning] = useState<'sync' | 'restore'>()
   const [items, setItems] = useState<(SyncItem | RestoreItem)[]>()
@@ -45,7 +45,7 @@ export function ReposView({ query, repos, settings, onChanged }: ReposViewProps)
     <div className="repos-view">
       <header className="repos-view-header">
         <h1>Repositories</h1>
-        {query && <Link to={{ view: 'search', q: query }}>← Back to results</Link>}
+        {from.q && <Link to={{ view: 'search', ...from }}>← Back to results</Link>}
       </header>
 
       <form className="repos-view-sync" onSubmit={submit}>

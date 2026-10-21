@@ -40,6 +40,8 @@ export type Route =
       view: 'repos'
       /** The query to go back to. */
       q: string
+      /** Whether that search asked for as many files as the server sends. */
+      more?: true
     }
 
 /** The file screen. */

@@ -27,19 +27,33 @@ export function stringifySearchObject(search: Record<string, unknown>): string {
   return text ? `?${text}` : ''
 }
 
-/** Reads the query and "Show more" from a search screen's parameters; anything else is the start page. */
+/**
+ * Reads the query and "Show more" from a search screen's parameters; anything else is the start page.
+ *
+ * A dropped parameter is set to `undefined` rather than left out, since the
+ * router lays the validated parameters over the raw ones and would otherwise
+ * keep the raw string.
+ */
 export function validateQuerySearch(raw: Record<string, unknown>): QuerySearch {
-  const q = typeof raw.q === 'string' ? raw.q : ''
-  return raw.more === 'true' || raw.more === true ? { q, more: true } : { q }
+  return { q: typeof raw.q === 'string' ? raw.q : '', more: raw.more === 'true' || raw.more === true ? true : undefined }
 }
 
-/** Reads the file screen's commit and line, dropping a ref that is not a full commit id and a line that is not positive. */
+/**
+ * Reads the file screen's commit and line, dropping a ref that is not a full
+ * commit id and a line that is not positive, as {@linkcode validateQuerySearch}
+ * drops parameters.
+ */
 export function validateFileSearch(raw: Record<string, unknown>): FileSearch {
   const line = Number(raw.line)
   return {
-    ...(typeof raw.ref === 'string' && COMMIT.test(raw.ref) ? { ref: raw.ref } : {}),
-    ...(Number.isInteger(line) && line > 0 ? { line } : {}),
+    ref: typeof raw.ref === 'string' && COMMIT.test(raw.ref) ? raw.ref : undefined,
+    line: Number.isInteger(line) && line > 0 ? line : undefined,
   }
+}
+
+/** Says whether a query has nothing to search for, which shows the start page. */
+export function isBlankQuery(q: string): boolean {
+  return q.trim() === ''
 }
 
 /** The file screen of `owner/repo` at a path, from its address's parts. */
@@ -53,7 +67,7 @@ export function fileRouteOf(params: { owner: string; repo: string; _splat?: stri
  * encoded and the rest as query parameters.
  */
 export function routeHref(route: Route): string {
-  if (route.view === 'repos') return `/repos${stringifySearchObject({ q: route.q })}`
+  if (route.view === 'repos') return `/repos${stringifySearchObject({ q: route.q, more: route.more })}`
   if (route.view === 'search') return `/${stringifySearchObject({ q: route.q, more: route.more })}`
   const segments = [...route.repo.split('/'), ...route.path.split('/')].map(encodeURIComponent)
   return `/file/${segments.join('/')}${stringifySearchObject({ q: route.q, more: route.more, ref: route.ref, line: route.line })}`
