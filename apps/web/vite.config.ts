@@ -3,7 +3,7 @@ import viteReact from '@vitejs/plugin-react'
 import { randomBytes } from 'node:crypto'
 import { mkdirSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
-import { defineConfig, type Plugin } from 'vite'
+import { defineConfig, type Plugin, type UserConfig } from 'vite'
 
 const PORT = 5173
 
@@ -34,7 +34,7 @@ function bundledPackages(): Plugin {
   return {
     name: 'bundle-grep-bundled-packages',
     apply: 'build',
-    generateBundle() {
+    generateBundle(): void {
       const dirs = new Set<string>()
       for (const id of this.getModuleIds()) {
         const dir = /^(.*\/node_modules\/(?:@[^/]+\/)?[^/]+)\//.exec(id)?.[1]
@@ -47,8 +47,10 @@ function bundledPackages(): Plugin {
   }
 }
 
-export default defineConfig({
-  server: { host: '127.0.0.1', port: PORT, strictPort: true },
-  ssr: { noExternal: true },
-  plugins: [devSession(), bundledPackages(), tanstackStart(), viteReact()],
-})
+export default defineConfig(
+  ({ command }): UserConfig => ({
+    server: { host: '127.0.0.1', port: PORT, strictPort: true },
+    ssr: command === 'build' ? { noExternal: true } : undefined,
+    plugins: [devSession(), bundledPackages(), tanstackStart(), viteReact()],
+  }),
+)

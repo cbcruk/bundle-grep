@@ -265,6 +265,7 @@ describe('bundle-grep', () => {
 
     const page = await (await fetch(origin, { headers: { cookie } })).text()
     expect(page).toContain('<title>bundle-grep</title>')
+    rmSync(join(root, 'cache', 'acme', 'app.git', 'bundle-grep-symbols.json'))
     const symbols = await (await fetch(`${origin}/?q=${encodeURIComponent('symbol:n repo:acme/app')}`, { headers: { cookie } })).text()
     expect(symbols).toContain('src/counter.ts')
     const asset = /\/assets\/[\w-]+\.js/.exec(page)![0]

@@ -17,13 +17,13 @@ import { ServeError, UiNotBuiltError } from './ui.errors'
 import type { ServeWebError, ServeWebOptions, WebServer, WebServerModule } from './ui.types'
 
 /**
- * The built web app: `web/` next to the bundle when installed, or the
- * workspace's `apps/web/dist` in a checkout.
+ * The built web app: `web/` next to the bundle, or the workspace's
+ * `apps/web/dist` when running from source.
  */
 function defaultAppDir(): URL | undefined {
-  return [new URL('web/', import.meta.url), new URL('../../../../apps/web/dist/', import.meta.url)].find(dir =>
-    existsSync(new URL('server/server.js', dir)),
-  )
+  const candidates = [new URL('web/', import.meta.url)]
+  if (import.meta.url.endsWith('.ts')) candidates.push(new URL('../../../../apps/web/dist/', import.meta.url))
+  return candidates.find(dir => existsSync(new URL('server/server.js', dir)))
 }
 
 /**
@@ -34,6 +34,8 @@ function defaultAppDir(): URL | undefined {
  * session secret, and a one-time code for {@linkcode WebServer.url}. The app
  * shares the CLI's WebAssembly files rather than carrying its own. Stopping
  * the server, or `signal`, stops a running sync or restore.
+ *
+ * The app keeps its configuration per process, so serve it once per process.
  *
  * @returns The running server, or why it could not start: no built app, or a
  * port it could not listen on.
