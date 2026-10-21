@@ -47,9 +47,8 @@ function forbidden(message: string): Response {
  *   through DNS rebinding sends its own host name, so it is turned away even
  *   though the socket is local.
  * - Every request but a `GET` or `HEAD` of `/session` needs the session
- *   cookie, which only the
- *   browser that traded this run's code holds. It is `SameSite=Strict`, so a
- *   page on another site cannot send it along.
+ *   cookie, which only the browser that traded this run's code holds. It is
+ *   `SameSite=Strict`, so a page on another site cannot send it along.
  *
  * @returns A refusal, or `undefined` when the request may proceed.
  */
