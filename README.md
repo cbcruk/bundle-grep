@@ -46,10 +46,10 @@ start, and runs until Ctrl-C. The URL ends in `/session?code=…`, a code that
 works once: the first browser to open it gets a session cookie for that run,
 so open it once, as printed; the browser stays signed in until `ui` stops.
 The page's scripts and styles are served to anyone; every other request
-without the cookie is refused, and requests from other sites cannot send it. Other users on the same machine can see the URL in the
-process list while the browser starts, so on a shared machine one of them
-could trade the code first and reach the archive; the link would then say it
-was already used.
+without the cookie is refused, and requests from other sites cannot send it.
+Other users on the same machine can see the URL in the process list while the
+browser starts, so on a shared machine one of them could trade the code first
+and reach the archive; the link would then say it was already used.
 
 ### Keeping the archive current
 
