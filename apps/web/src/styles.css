@@ -1,0 +1,124 @@
+:root {
+  --sans: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Noto Sans', Helvetica, Arial, sans-serif;
+  --mono: 12px/20px ui-monospace, SFMono-Regular, 'SF Mono', Menlo, Consolas, monospace;
+  --fg: #1f2328;
+  --fg-muted: #59636e;
+  --canvas: #ffffff;
+  --canvas-subtle: #f6f8fa;
+  --canvas-inset: #f6f8fa;
+  --canvas-overlay: #ffffff;
+  --header-bg: #f6f8fa;
+  --border: #d1d9e0;
+  --accent: #0969da;
+  --accent-muted: rgb(84 174 255 / 0.2);
+  --match-bg: #fff8c5;
+  --marked-bg: rgb(255 223 93 / 0.25);
+  --danger-fg: #d1242f;
+  --danger-bg: #ffebe9;
+  --danger-border: rgb(255 129 130 / 0.4);
+  --attention-fg: #9a6700;
+  --attention-bg: #fff8c5;
+  --success-fg: #1a7f37;
+  --added-bg: #dafbe1;
+  --removed-bg: #ffebe9;
+  --shadow: 0 8px 24px rgb(140 149 159 / 0.2);
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --fg: #f0f6fc;
+    --fg-muted: #9198a1;
+    --canvas: #0d1117;
+    --canvas-subtle: #151b23;
+    --canvas-inset: #010409;
+    --canvas-overlay: #151b23;
+    --header-bg: #010409;
+    --border: #3d444d;
+    --accent: #4493f8;
+    --accent-muted: rgb(65 132 228 / 0.25);
+    --match-bg: rgb(187 128 9 / 0.4);
+    --marked-bg: rgb(187 128 9 / 0.15);
+    --danger-fg: #f85149;
+    --danger-bg: rgb(248 81 73 / 0.1);
+    --danger-border: rgb(248 81 73 / 0.4);
+    --attention-fg: #d29922;
+    --attention-bg: rgb(187 128 9 / 0.15);
+    --success-fg: #3fb950;
+    --added-bg: rgb(46 160 67 / 0.15);
+    --removed-bg: rgb(248 81 73 / 0.1);
+    --shadow: 0 8px 24px rgb(1 4 9 / 0.8);
+  }
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  font: 14px/1.5 var(--sans);
+  color: var(--fg);
+  background: var(--canvas);
+}
+
+code,
+kbd {
+  font: var(--mono);
+}
+
+kbd {
+  padding: 0 4px;
+  border: 1px solid var(--border);
+  border-bottom-width: 2px;
+  border-radius: 4px;
+  background: var(--canvas-subtle);
+}
+
+a {
+  color: var(--accent);
+}
+
+button {
+  padding: 5px 16px;
+  font: inherit;
+  font-weight: 500;
+  color: var(--fg);
+  background: var(--canvas-subtle);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  cursor: pointer;
+}
+
+button.primary {
+  color: #ffffff;
+  background: #1f883d;
+  border-color: rgb(31 35 40 / 0.15);
+}
+
+button:disabled {
+  opacity: 0.6;
+  cursor: default;
+}
+
+.hint {
+  color: var(--fg-muted);
+  font-size: 12px;
+  margin: 0;
+}
+
+.notice {
+  margin: 0 0 12px;
+  padding: 8px 12px;
+  border: 1px solid var(--attention-fg);
+  border-radius: 6px;
+  background: var(--attention-bg);
+}
+
+.notice.danger {
+  border-color: var(--danger-border);
+  background: var(--danger-bg);
+}
+
+.notice ul {
+  margin: 4px 0 0;
+}

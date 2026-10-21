@@ -1,0 +1,28 @@
+.commit-result-sha {
+  flex: none;
+  color: var(--fg-muted);
+}
+
+.commit-result-subject {
+  font-weight: 600;
+  overflow-wrap: anywhere;
+}
+
+.commit-result-meta {
+  margin-left: auto;
+  flex: none;
+  font-size: 12px;
+  color: var(--fg-muted);
+}
+
+.commit-result-path {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 4px 12px;
+  border-bottom: 1px solid var(--border);
+}
+
+.commit-result-file + .commit-result-file {
+  border-top: 1px solid var(--border);
+}

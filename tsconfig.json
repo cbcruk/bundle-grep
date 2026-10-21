@@ -26,5 +26,8 @@
     "scripts",
     "vitest.config.ts",
     "vitest.setup.ts"
+  ],
+  "exclude": [
+    "apps/web"
   ]
 }

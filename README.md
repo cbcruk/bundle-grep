@@ -184,6 +184,16 @@ pnpm dev:ui                                            # Vite on 127.0.0.1:5173
 pnpm cli ui --dev-server http://127.0.0.1:5173
 ```
 
+Its replacement, a TanStack Start app with server rendering, is in
+`apps/web`; `bundle-grep ui` does not serve it yet. Its dev server reads the
+archive under `BUNDLE_GREP_ROOT` (or `~/.bundle-grep`) and prints a one-time
+session link to open:
+
+```sh
+pnpm dev:web                                           # Vite on 127.0.0.1:5173
+pnpm build:web                                         # apps/web/dist/{client,server}
+```
+
 `scripts/smoke-test.sh <executable> [version]` runs an installed
 `bundle-grep` end to end against a throwaway repository, `ui` included.
 Pushing a tag `v<version>` that matches `packages/cli/package.json` packs the
