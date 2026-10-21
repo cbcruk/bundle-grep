@@ -2,6 +2,7 @@ import { useRouter } from '@tanstack/react-router'
 import type { MouseEvent } from 'react'
 
 import type { RouteAnchorProps } from './route-anchor.types'
+import { routesClick } from './route-anchor.utils'
 
 /**
  * The anchor every Astryx link renders, which changes the route without
@@ -14,11 +15,9 @@ export function RouteAnchor({ onClick, to: _to, ...props }: RouteAnchorProps): R
   const router = useRouter()
   const click = (event: MouseEvent<HTMLAnchorElement>): void => {
     onClick?.(event)
-    const { href, target } = props
-    if (event.defaultPrevented || !href || (target && target !== '_self')) return
-    if (event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return
+    if (!routesClick(event, props.href, props.target)) return
     event.preventDefault()
-    void router.navigate({ href })
+    void router.navigate({ href: props.href })
   }
   return <a {...props} onClick={click} />
 }

@@ -6,6 +6,7 @@ import { Divider } from '@astryxdesign/core/Divider'
 import { Layout, LayoutContent } from '@astryxdesign/core/Layout'
 import { HStack, VStack } from '@astryxdesign/core/Stack'
 import { Text } from '@astryxdesign/core/Text'
+import { Tooltip } from '@astryxdesign/core/Tooltip'
 import { useEffect } from 'react'
 
 import { useGo } from '../../hooks/use-go'
@@ -66,7 +67,13 @@ export function FileView({ route, blob, highlights }: FileViewProps): React.JSX.
                   </BreadcrumbItem>
                 ))}
               </Breadcrumbs>
-              {route.ref && <Code color="secondary">@ {route.ref.slice(0, 7)}</Code>}
+              {route.ref && (
+                <Tooltip content={route.ref}>
+                  <Code color="secondary" tabIndex={0}>
+                    @ {route.ref.slice(0, 7)}
+                  </Code>
+                </Tooltip>
+              )}
             </HStack>
             {!blob.ok && <Banner status="error" title={blob.error.message} />}
             {blob.ok && blob.value.kind === 'binary' && (

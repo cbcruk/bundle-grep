@@ -29,6 +29,45 @@ function packageDir(id: string): string | undefined {
   return /^(.*\/node_modules\/(?:@[^/]+\/)?[^/]+)\//.exec(id)?.[1]
 }
 
+const MIT = `Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.`
+
+/** Finds the first copyright line in a package's source, type, or CSS files. */
+function copyrightIn(dir: string): string | undefined {
+  const files = readdirSync(dir, { recursive: true, encoding: 'utf8' })
+    .filter(name => /\.(m?[jt]s|css|flow)$/.test(name) && !name.includes('node_modules'))
+    .slice(0, 200)
+  for (const name of files) {
+    const line = /Copyright \(c\)[^\n*]*/.exec(readFileSync(join(dir, name), 'utf8'))?.[0]
+    if (line) return line.trim()
+  }
+  return undefined
+}
+
+/**
+ * The text of a package without a license file: the MIT license under the
+ * copyright line its sources carry, when it says MIT and has one.
+ */
+function fallbackText(dir: string, license: string | undefined): string {
+  const copyright = license === 'MIT' ? copyrightIn(dir) : undefined
+  return copyright ? `MIT License\n\n${copyright}\n\n${MIT}` : `No license file; package.json says ${license ?? 'nothing'}.`
+}
+
 function noticeOf(dir: string): Notice {
   const manifest = JSON.parse(readFileSync(join(dir, 'package.json'), 'utf8')) as { name: string; version: string; license?: string }
   const file = readdirSync(dir).find(name => /^(licen[cs]e|copying)(\.|$)/i.test(name))
@@ -36,7 +75,7 @@ function noticeOf(dir: string): Notice {
     name: manifest.name,
     version: manifest.version,
     license: manifest.license ?? 'unknown',
-    text: file ? readFileSync(join(dir, file), 'utf8').trim() : `No license file; package.json says ${manifest.license ?? 'nothing'}.`,
+    text: file ? readFileSync(join(dir, file), 'utf8').trim() : fallbackText(dir, manifest.license),
   }
 }
 

@@ -5,7 +5,7 @@
 
 @media (max-width: 768px) {
   .search-box {
-    width: 100%;
+    width: calc(100vw - 11rem);
   }
 }
 
@@ -20,11 +20,23 @@
   top: calc(100% + var(--spacing-1));
 }
 
-.search-box-popup .astryx-list {
-  padding-block: var(--spacing-1);
+.search-box-suggestions {
+  margin: 0;
+  padding: var(--spacing-1) 0;
+  list-style: none;
   font-family: var(--font-family-code);
   background: var(--color-background-popover);
   border: var(--border-width) solid var(--color-border);
   border-radius: var(--radius-container);
   box-shadow: var(--shadow-med);
+}
+
+.search-box-suggestions li {
+  padding: var(--spacing-1) var(--spacing-3);
+  overflow-wrap: anywhere;
+  cursor: pointer;
+}
+
+.search-box-suggestions li[aria-selected='true'] {
+  background: var(--color-overlay-hover);
 }

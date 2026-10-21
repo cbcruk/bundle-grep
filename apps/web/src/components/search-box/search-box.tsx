@@ -1,4 +1,3 @@
-import { List, ListItem } from '@astryxdesign/core/List'
 import { TextInput } from '@astryxdesign/core/TextInput'
 import { parseQuery } from '@bundle-grep/core/query'
 import { useEffect, useRef, useState, type FormEvent, type KeyboardEvent } from 'react'
@@ -115,30 +114,29 @@ export function SearchBox({ query, sources, onSearch, inputRef }: SearchBoxProps
         onFocus={() => setOpen(true)}
       />
       {showing && (
-        <div className="search-box-popup">
-          <List id="search-suggestions" role="listbox" aria-label="Suggestions" density="compact">
-            {suggestions.map((suggestion, index) => (
-              <ListItem
-                key={suggestion.insert}
-                role="option"
-                label={suggestion.label}
-                isSelected={picked && index === active}
-                onMouseDown={event => {
-                  event.preventDefault()
-                  accept(suggestion)
-                }}
-                onMouseEnter={() => {
-                  setActive(index)
-                  setPicked(true)
-                }}
-              />
-            ))}
-          </List>
-        </div>
+        <ul className="search-box-popup search-box-suggestions" id="search-suggestions" role="listbox" aria-label="Suggestions">
+          {suggestions.map((suggestion, index) => (
+            <li
+              key={suggestion.insert}
+              role="option"
+              aria-selected={picked && index === active}
+              onMouseDown={event => {
+                event.preventDefault()
+                accept(suggestion)
+              }}
+              onMouseEnter={() => {
+                setActive(index)
+                setPicked(true)
+              }}
+            >
+              {suggestion.label}
+            </li>
+          ))}
+        </ul>
       )}
       {error && (
         <div className="search-box-popup">
-          <QueryError query={error.query} error={error.error} />
+          <QueryError query={error.query} error={error.error} isFloating />
         </div>
       )}
     </form>
