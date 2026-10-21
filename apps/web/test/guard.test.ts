@@ -7,7 +7,7 @@ const HOST = '127.0.0.1:4100'
 const config: WebConfig = {
   layout: { archiveDir: '/a', cacheDir: '/c' },
   root: '/',
-  host: HOST,
+  port: 4100,
   code: 'one-time-code',
   token: 'session-secret',
 }
@@ -25,11 +25,14 @@ describe('guardRequest', () => {
     expect(guardRequest(request('/_serverFn/x', withCookie), config)).toBeUndefined()
   })
 
-  test('refuses another Host header, as a DNS-rebound page sends', () => {
-    for (const host of ['evil.example:4100', '127.0.0.1:4101', 'localhost:4100']) {
-      expect(guardRequest(request('/', { ...withCookie, host }), config)?.status).toBe(403)
+  test('ignores the Host header, so localhost and a forwarded port work', () => {
+    for (const host of ['localhost:4100', '127.0.0.1:8080']) {
+      expect(guardRequest(request('/', { ...withCookie, host }), config)).toBeUndefined()
     }
-    expect(guardRequest(request('/session', { host: 'evil.example:4100' }), config)?.status).toBe(403)
+  })
+
+  test('refuses a DNS-rebound page, which has no cookie for its host name', () => {
+    expect(guardRequest(request('/', { host: 'evil.example:4100' }), config)?.status).toBe(403)
   })
 
   test('refuses a missing, wrong, or other run’s cookie', async () => {

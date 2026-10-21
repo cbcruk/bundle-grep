@@ -12,8 +12,8 @@ export interface WebConfig {
   layout: ArchiveLayout
   /** The root the layout came from, shown in settings. */
   root: string
-  /** The only `Host` header accepted, such as `"127.0.0.1:53124"`. */
-  host: string
+  /** The port the app is served on, which names the session cookie. */
+  port: number
   /** The one-time code that `GET /session` trades for the session cookie. */
   code: string
   /** The session cookie's value: this run's secret. */

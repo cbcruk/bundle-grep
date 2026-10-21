@@ -43,7 +43,7 @@ function search(q: string, extra: Partial<SearchInput> = {}): Promise<unknown[]>
 }
 
 function stateFor(extra: Partial<WebConfig> = {}): WebState {
-  return { config: { layout, root: fixture.root, host: '127.0.0.1:4100', code: 'c', token: 't', ...extra }, codeUsed: false, busy: false }
+  return { config: { layout, root: fixture.root, port: 4100, code: 'c', token: 't', ...extra }, codeUsed: false, busy: false }
 }
 
 describe('searchStream', () => {
