@@ -8,6 +8,7 @@ import type { Result } from 'better-result'
 
 import { runProcess } from '../process/run-process'
 import { GitError } from './git.errors'
+import { gitCommand } from './git-command'
 import type { GitOutput, RunGitOptions } from './git.types'
 
 const REPOSITORY_ENV = {
@@ -33,6 +34,9 @@ const REPOSITORY_ENV = {
  * as `color.grep` still wins over it, so callers parsing output also pass
  * `--no-color`.
  *
+ * On macOS the developer tools' git is run directly rather than through the
+ * `/usr/bin/git` shim; see {@linkcode gitCommand}.
+ *
  * Variables that point git at another repository, such as the `GIT_DIR` a
  * hook exports, are removed, so git always works on the repository at
  * {@linkcode RunGitOptions.cwd}; so are the ones that change how pathspecs
@@ -42,7 +46,7 @@ const REPOSITORY_ENV = {
  * exits with a status outside `0` and `allowExitCodes`.
  */
 export async function runGit(args: readonly string[], options: RunGitOptions): Promise<Result<GitOutput, GitError>> {
-  const result = await runProcess('git', ['-c', 'color.ui=never', ...args], {
+  const result = await runProcess(await gitCommand(), ['-c', 'color.ui=never', ...args], {
     ...options,
     env: { ...REPOSITORY_ENV, ...options.env },
   })
