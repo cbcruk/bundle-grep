@@ -7,12 +7,13 @@ import { Layout, LayoutContent } from '@astryxdesign/core/Layout'
 import { HStack, VStack } from '@astryxdesign/core/Stack'
 import { Text } from '@astryxdesign/core/Text'
 import { Tooltip } from '@astryxdesign/core/Tooltip'
-import { useEffect } from 'react'
+import { useEffect, useMemo } from 'react'
 
 import { useGo } from '../../hooks/use-go'
 import { segments } from '../../lib/highlight'
 import { isTyping } from '../../lib/keyboard'
 import { routeHref } from '../../lib/route'
+import { syntaxLanguage, syntaxTokens } from '../../lib/syntax'
 import { CodeLine } from '../file-result/code-line'
 import { Link } from '../link/link'
 import type { Route } from '../../lib/route.types'
@@ -23,13 +24,14 @@ import '../file-result/file-result.css'
 /**
  * One file at `HEAD`, or at the commit the route names, with line numbers.
  *
- * The line the address names is marked and scrolled to, and the matches the
- * search found in this file are highlighted. `Escape` goes back to the results.
+ * The code is colored by syntax, the line the address names is marked and
+ * scrolled to, and the matches the search found in this file are highlighted. `Escape` goes back to the results.
  */
 export function FileView({ route, blob, highlights }: FileViewProps): React.JSX.Element {
   const go = useGo()
   const back: Route = route.more ? { view: 'search', q: route.q, more: true } : { view: 'search', q: route.q }
   const lines = blob.ok && blob.value.kind === 'text' ? blob.value.lines : undefined
+  const tokens = useMemo(() => lines && syntaxTokens(lines, syntaxLanguage(route.path)), [lines, route.path])
 
   useEffect(() => {
     if (!lines || route.line === undefined) return
@@ -96,7 +98,7 @@ export function FileView({ route, blob, highlights }: FileViewProps): React.JSX.
                           number={number}
                           to={{ ...route, line: number }}
                           replace
-                          segments={segments(text, highlights.get(number) ?? [])}
+                          segments={segments(text, highlights.get(number) ?? [], tokens?.[index])}
                           context={false}
                           marked={number === route.line}
                         />

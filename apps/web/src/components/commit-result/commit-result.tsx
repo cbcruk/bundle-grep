@@ -7,6 +7,7 @@ import { Fragment } from 'react'
 
 import { segments } from '../../lib/highlight'
 import { changeRoute } from '../../lib/result-route'
+import { syntaxLanguage, syntaxTokens } from '../../lib/syntax'
 import { CodeLine } from '../file-result/code-line'
 import { Link } from '../link/link'
 import type { CommitResultProps } from './commit-result.types'
@@ -32,32 +33,35 @@ export function CommitResult({ from, result, selected, ref }: CommitResultProps)
           {commit.author} · {commit.date.slice(0, 10)}
         </Text>
       </HStack>
-      {files.map(file => (
-        <Fragment key={file.path}>
-          <Divider />
-          <HStack gap={2} paddingInline={3} paddingBlock={1} align="center" justify="between">
-            <Link to={changeRoute(from, repo, commit, file.path, file.lines[0])} className="file-result-path" weight="semibold">
-              {file.path}
-            </Link>
-            {file.language && <Text type="supporting">{file.language}</Text>}
-          </HStack>
-          <Divider />
-          <table className="code">
-            <tbody>
-              {file.lines.map(line => (
-                <CodeLine
-                  key={`${line.change}:${line.number}`}
-                  number={line.number}
-                  to={changeRoute(from, repo, commit, file.path, line)}
-                  segments={segments(line.text, line.ranges)}
-                  context={false}
-                  change={line.change}
-                />
-              ))}
-            </tbody>
-          </table>
-        </Fragment>
-      ))}
+      {files.map(file => {
+        const lang = syntaxLanguage(file.path, file.language)
+        return (
+          <Fragment key={file.path}>
+            <Divider />
+            <HStack gap={2} paddingInline={3} paddingBlock={1} align="center" justify="between">
+              <Link to={changeRoute(from, repo, commit, file.path, file.lines[0])} className="file-result-path" weight="semibold">
+                {file.path}
+              </Link>
+              {file.language && <Text type="supporting">{file.language}</Text>}
+            </HStack>
+            <Divider />
+            <table className="code">
+              <tbody>
+                {file.lines.map(line => (
+                  <CodeLine
+                    key={`${line.change}:${line.number}`}
+                    number={line.number}
+                    to={changeRoute(from, repo, commit, file.path, line)}
+                    segments={segments(line.text, line.ranges, syntaxTokens([line.text], lang)?.[0])}
+                    context={false}
+                    change={line.change}
+                  />
+                ))}
+              </tbody>
+            </table>
+          </Fragment>
+        )
+      })}
     </Card>
   )
 }

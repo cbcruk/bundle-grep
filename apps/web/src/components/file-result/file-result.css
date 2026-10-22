@@ -34,7 +34,7 @@
 }
 
 .code-line.context .code-text {
-  color: var(--color-text-secondary);
+  opacity: 0.6;
 }
 
 .code-line.marked {

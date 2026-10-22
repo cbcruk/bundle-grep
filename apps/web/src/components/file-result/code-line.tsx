@@ -17,7 +17,19 @@ export function CodeLine({ number, to, replace, segments, context, change, marke
         </td>
       )}
       <td className="code-text">
-        {segments.map((segment, index) => (segment.match ? <mark key={index}>{segment.text}</mark> : segment.text))}
+        {segments.map((segment, index) =>
+          segment.match ? (
+            <mark key={index} style={segment.style}>
+              {segment.text}
+            </mark>
+          ) : segment.style ? (
+            <span key={index} style={segment.style}>
+              {segment.text}
+            </span>
+          ) : (
+            segment.text
+          ),
+        )}
       </td>
     </tr>
   )

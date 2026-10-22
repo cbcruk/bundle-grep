@@ -12,6 +12,7 @@ import { fileRouteOf, parseSearchString, routeHref, stringifySearchObject, valid
 import { changeRoute, commitRoute, fileRoute, routeHighlights } from '../src/lib/result-route'
 import { usesHistory, usesSymbol } from '../src/components/results/results.utils'
 import { routesClick } from '../src/components/route-anchor/route-anchor.utils'
+import { syntaxLanguage, syntaxTokens } from '../src/lib/syntax'
 
 describe('usesSymbol', () => {
   test('finds a positive symbol: qualifier anywhere in a query that parses', () => {
@@ -82,6 +83,41 @@ describe('segments', () => {
 
   test('an empty line is one empty plain segment', () => {
     expect(segments('', [])).toEqual([{ text: '', match: false }])
+  })
+
+  test('splits runs at both match and syntax boundaries', () => {
+    const keyword = { color: 'var(--color-syntax-keyword)' }
+    const tokens = [{ text: 'const', style: keyword }, { text: ' ab' }]
+    expect(segments('const ab', [{ start: 3, end: 7 }], tokens)).toEqual([
+      { text: 'con', match: false, style: keyword },
+      { text: 'st', match: true, style: keyword },
+      { text: ' a', match: true, style: undefined },
+      { text: 'b', match: false, style: undefined },
+    ])
+  })
+
+  test('ignores tokens that do not cover the line', () => {
+    expect(segments('abc', [], [{ text: 'ab' }])).toEqual([{ text: 'abc', match: false }])
+  })
+})
+
+describe('syntax', () => {
+  test('picks a grammar by language name, extension, or file name', () => {
+    expect(syntaxLanguage('src/a.ts', 'TypeScript')).toBe('typescript')
+    expect(syntaxLanguage('src/a.tsx')).toBe('tsx')
+    expect(syntaxLanguage('Dockerfile')).toBe('dockerfile')
+    expect(syntaxLanguage('notes.unknown-ext')).toBeUndefined()
+  })
+
+  test('colors each line with theme tokens, carrying state across lines', () => {
+    const tokens = syntaxTokens(['/* a', 'b */ const x = 1'], 'ts')!
+    expect(tokens).toHaveLength(2)
+    expect(tokens[1]![0]).toEqual({ text: 'b */ ', style: { color: 'var(--color-syntax-comment)' } })
+    expect(tokens[1]!.find(token => token.text.startsWith('const'))?.style).toEqual({ color: 'var(--color-syntax-keyword)' })
+  })
+
+  test('leaves files without a grammar uncolored', () => {
+    expect(syntaxTokens(['x'], undefined)).toBeUndefined()
   })
 })
 
